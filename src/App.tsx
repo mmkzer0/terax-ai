@@ -4,6 +4,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
 import "./App.css";
 import { ThemeProvider } from "./components/theme-provider";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { openPty, type PtySession } from "./pty";
 
 export default function App() {
@@ -56,16 +57,18 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <div
-        style={{
-          height: "100vh",
-          padding: 8,
-          background: "#101420",
-          boxSizing: "border-box",
-        }}
-      >
-        <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
-      </div>
+      <TooltipProvider>
+        <div
+          style={{
+            height: "100vh",
+            padding: 8,
+            background: "#101420",
+            boxSizing: "border-box",
+          }}
+        >
+          <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
+        </div>
+      </TooltipProvider>
     </ThemeProvider>
   );
 }
