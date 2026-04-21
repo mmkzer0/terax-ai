@@ -27,8 +27,12 @@ export default function App() {
     let disposed = false;
 
     (async () => {
-      const session = await openPty(term.cols, term.rows, (bytes) => {
-        term.write(bytes);
+      const session = await openPty(term.cols, term.rows, {
+        onData: (bytes) => term.write(bytes),
+        onExit: (code) => {
+          term.write(`\r\n\x1b[2m[process exited: ${code}]\x1b[0m\r\n`);
+          term.options.disableStdin = true;
+        },
       });
       if (disposed) {
         session.close();
