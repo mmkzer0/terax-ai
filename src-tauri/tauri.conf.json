@@ -12,9 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "tauri-terminal-emulator",
+        "title": "Terax",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+
       }
     ],
     "security": {

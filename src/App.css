@@ -123,8 +123,36 @@
     }
   body {
     @apply bg-background text-foreground;
+    margin: 0;
+    overflow: hidden;
+    }
+  html, body, #root {
+    height: 100%;
     }
   html {
     @apply font-sans;
     }
 }
+
+/*
+ * xterm.js overrides — kept outside @layer so they win against the addon's
+ * own stylesheet (which is not in any layer and would otherwise override).
+ */
+.xterm .xterm-viewport,
+.xterm-viewport {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.xterm .xterm-viewport::-webkit-scrollbar,
+.xterm-viewport::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+.xterm,
+.xterm-screen,
+.xterm:focus,
+.xterm.focus {
+  outline: none !important;
+}
+
