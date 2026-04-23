@@ -9,19 +9,25 @@ use std::path::PathBuf;
 #[tauri::command]
 pub fn list_subdirs(path: String) -> Result<Vec<String>, String> {
     let root = PathBuf::from(&path);
-    let read = std::fs::read_dir(&root).map_err(|e| e.to_string())?;
+    let read = std::fs::read_dir(&root).map_err(|e| {
+        log::debug!("list_subdirs({}) read_dir failed: {e}", root.display());
+        e.to_string()
+    })?;
 
     let mut dirs: Vec<String> = read
         .filter_map(Result::ok)
-        .filter(|entry| {
-            std::fs::metadata(entry.path())
+        .filter(|entry| match entry.file_type() {
+            Ok(t) if t.is_dir() => true,
+            // Resolve symlinks with a single stat — matches shell `cd` semantics.
+            Ok(t) if t.is_symlink() => std::fs::metadata(entry.path())
                 .map(|m| m.is_dir())
-                .unwrap_or(false)
+                .unwrap_or(false),
+            _ => false,
         })
         .filter_map(|entry| entry.file_name().into_string().ok())
         .filter(|name| !name.starts_with('.'))
         .collect();
 
-    dirs.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    dirs.sort_by_key(|a| a.to_lowercase());
     Ok(dirs)
 }
