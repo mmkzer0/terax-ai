@@ -20,6 +20,7 @@ export type Tab = TerminalTab | EditorTab;
 export type TabPatch = Partial<{
   title: string;
   cwd: string;
+  path: string;
   dirty: boolean;
 }>;
 
@@ -101,6 +102,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
           ...x,
           ...(patch.title !== undefined && { title: patch.title }),
           ...(patch.dirty !== undefined && { dirty: patch.dirty }),
+          ...(patch.path !== undefined && { path: patch.path }),
         };
       }),
     );

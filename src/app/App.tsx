@@ -152,6 +152,61 @@ export default function App() {
     [openFileTab],
   );
 
+  // Explorer root follows the active tab's working directory. For terminal
+  // tabs: the tracked cwd. For editor tabs: the file's parent directory. If
+  // neither is known yet, fall back to the most recent terminal cwd, then home.
+  const explorerRoot = useMemo<string | null>(() => {
+    if (activeTab?.kind === "terminal" && activeTab.cwd) return activeTab.cwd;
+    if (activeTab?.kind === "editor") {
+      const i = activeTab.path.lastIndexOf("/");
+      return i <= 0 ? "/" : activeTab.path.slice(0, i);
+    }
+    const anyTerm = tabs.find((t) => t.kind === "terminal" && t.cwd);
+    if (anyTerm?.kind === "terminal" && anyTerm.cwd) return anyTerm.cwd;
+    return home;
+  }, [activeTab, tabs, home]);
+
+  const handlePathRenamed = useCallback(
+    (from: string, to: string) => {
+      for (const t of tabs) {
+        if (t.kind !== "editor") continue;
+        if (t.path === from) {
+          const i = to.lastIndexOf("/");
+          updateTab(t.id, { path: to, title: i === -1 ? to : to.slice(i + 1) });
+        } else if (t.path.startsWith(`${from}/`)) {
+          // Tab under a renamed directory — remap the prefix.
+          const suffix = t.path.slice(from.length);
+          const newPath = `${to}${suffix}`;
+          const i = newPath.lastIndexOf("/");
+          updateTab(t.id, {
+            path: newPath,
+            title: i === -1 ? newPath : newPath.slice(i + 1),
+          });
+        }
+      }
+    },
+    [tabs, updateTab],
+  );
+
+  const handlePathDeleted = useCallback(
+    (path: string) => {
+      for (const t of tabs) {
+        if (t.kind !== "editor") continue;
+        if (t.path === path || t.path.startsWith(`${path}/`)) {
+          // Force-close without dirty prompt: the file is gone.
+          searchAddons.current.delete(t.id);
+          terminalRefs.current.delete(t.id);
+          sessions.clear(t.id);
+          closeTab(t.id);
+        }
+      }
+    },
+    [tabs, closeTab, sessions],
+  );
+
+  const activeFilePath =
+    activeTab?.kind === "editor" ? activeTab.path : null;
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -286,7 +341,12 @@ export default function App() {
                 collapsedSize={0}
               >
                 <div className="h-full border-r border-border/60 bg-card">
-                  <FileExplorer onOpenFile={handleOpenFile} />
+                  <FileExplorer
+                    rootPath={explorerRoot}
+                    onOpenFile={handleOpenFile}
+                    onPathRenamed={handlePathRenamed}
+                    onPathDeleted={handlePathDeleted}
+                  />
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle />
@@ -358,6 +418,7 @@ export default function App() {
 
           <StatusBar
             cwd={activeCwd}
+            filePath={activeFilePath}
             home={home}
             onCd={sendCd}
             aiOpen={aiOpen}

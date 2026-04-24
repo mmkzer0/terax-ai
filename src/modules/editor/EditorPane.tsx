@@ -1,6 +1,6 @@
 import { keymap } from "@codemirror/view";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   buildSharedExtensions,
   languageCompartment,
@@ -25,12 +25,20 @@ export function EditorPane({ path, onDirtyChange, onSaved }: Props) {
   const { doc, onChange, save } = useDocument({ path, onDirtyChange });
   const cmRef = useRef<ReactCodeMirrorRef>(null);
 
-  // Theme is read from CSS tokens at mount.
+  // Stabilize save + onSaved via refs so the extensions array never changes
+  // identity. A new identity triggers @uiw/react-codemirror to dispatch
+  // StateEffect.reconfigure, which wipes compartment contents — including
+  // the language pack we swapped in, causing syntax to disappear.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
+
   const theme = useMemo(() => buildEditorTheme(), []);
-  const sharedExtensions = useMemo(
+
+  const extensions = useMemo(
     () => [
       ...buildSharedExtensions(),
-      // Placeholder for language — swapped in by the effect below.
       languageCompartment.of([]),
       keymap.of([
         {
@@ -38,19 +46,18 @@ export function EditorPane({ path, onDirtyChange, onSaved }: Props) {
           preventDefault: true,
           run: () => {
             void (async () => {
-              await save();
-              onSaved?.();
+              await saveRef.current();
+              onSavedRef.current?.();
             })();
             return true;
           },
         },
       ]),
     ],
-    [save, onSaved],
+    [],
   );
 
   // Lazy-load and apply the language pack whenever the path changes.
-  const [langLoaded, setLangLoaded] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     resolveLanguage(path).then((ext) => {
@@ -60,12 +67,11 @@ export function EditorPane({ path, onDirtyChange, onSaved }: Props) {
       view.dispatch({
         effects: languageCompartment.reconfigure(ext ?? []),
       });
-      setLangLoaded(path);
     });
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, doc.status]);
 
   if (doc.status === "loading") {
     return (
@@ -103,18 +109,19 @@ export function EditorPane({ path, onDirtyChange, onSaved }: Props) {
   }
 
   return (
-    <div className="h-full" data-lang-loaded={langLoaded === path}>
+    <div className="flex h-full min-h-0 flex-col">
       <CodeMirror
         ref={cmRef}
         value={doc.content}
         onChange={onChange}
         theme={theme}
-        extensions={sharedExtensions}
+        extensions={extensions}
         height="100%"
+        className="flex-1 min-h-0 overflow-hidden"
         basicSetup={{
           lineNumbers: true,
           highlightActiveLineGutter: true,
-          foldGutter: false, // provided by sharedExtensions
+          foldGutter: false,
           bracketMatching: false,
           closeBrackets: false,
           autocompletion: false,

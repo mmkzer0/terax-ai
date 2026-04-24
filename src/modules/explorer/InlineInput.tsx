@@ -1,0 +1,65 @@
+import { useEffect, useRef, useState } from "react";
+
+type Props = {
+  initial: string;
+  placeholder?: string;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+};
+
+/**
+ * Self-focusing single-line input for rename / create flows in the tree.
+ * Enter commits, Escape cancels, blur commits (matches VSCode behavior —
+ * dismissing the input is an implicit commit so a typed name isn't lost).
+ */
+export function InlineInput({
+  initial,
+  placeholder,
+  onCommit,
+  onCancel,
+}: Props) {
+  const [value, setValue] = useState(initial);
+  const ref = useRef<HTMLInputElement>(null);
+  const committedRef = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    // Select up to the extension so typing replaces the basename cleanly.
+    const dot = initial.lastIndexOf(".");
+    if (dot > 0) el.setSelectionRange(0, dot);
+    else el.select();
+  }, [initial]);
+
+  const commit = () => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    onCommit(value);
+  };
+  const cancel = () => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    onCancel();
+  };
+
+  return (
+    <input
+      ref={ref}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancel();
+        }
+      }}
+      onBlur={commit}
+      className="flex-1 truncate rounded-sm border border-border bg-background px-1.5 py-0.5 text-xs text-foreground outline-none ring-0 focus:border-ring"
+    />
+  );
+}

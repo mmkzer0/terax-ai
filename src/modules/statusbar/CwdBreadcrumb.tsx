@@ -25,11 +25,47 @@ import { segmentsFromCwd } from "./lib/pathUtils";
 
 type Props = {
   cwd: string | null;
+  filePath?: string | null;
   home: string | null;
   onCd: (path: string) => void;
 };
 
-export function CwdBreadcrumb({ cwd, home, onCd }: Props) {
+function dirname(path: string): string {
+  const i = path.lastIndexOf("/");
+  if (i <= 0) return "/";
+  return path.slice(0, i);
+}
+
+function basename(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? path : path.slice(i + 1);
+}
+
+export function CwdBreadcrumb({ cwd, filePath, home, onCd }: Props) {
+  // File mode: dir segments navigate; filename is the terminal leaf.
+  if (filePath) {
+    const dir = dirname(filePath);
+    const name = basename(filePath);
+    const segments = segmentsFromCwd(dir, home);
+    return (
+      <Breadcrumb>
+        <BreadcrumbList className="gap-1 text-xs sm:gap-1.5">
+          {segments.map((s) => (
+            <BreadcrumbSegment
+              key={s.fullPath}
+              label={s.label}
+              isHome={s.isHome}
+              onClick={() => onCd(s.fullPath)}
+            />
+          ))}
+          <BreadcrumbItem>
+            <BreadcrumbPage className="text-foreground">{name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+    );
+  }
+
   if (!cwd) {
     return (
       <span className="text-xs text-muted-foreground/70">no directory</span>

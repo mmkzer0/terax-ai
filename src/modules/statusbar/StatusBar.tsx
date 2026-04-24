@@ -3,6 +3,7 @@ import { CwdBreadcrumb } from "./CwdBreadcrumb";
 
 type Props = {
   cwd: string | null;
+  filePath?: string | null;
   home: string | null;
   onCd: (path: string) => void;
   aiOpen: boolean;
@@ -13,6 +14,7 @@ type Props = {
 
 export function StatusBar({
   cwd,
+  filePath,
   home,
   onCd,
   aiOpen,
@@ -23,7 +25,7 @@ export function StatusBar({
   return (
     <footer className="flex h-9 shrink-0 items-center justify-between gap-3 border-t border-border/60 bg-card/60 px-3">
       <div className="min-w-0 flex-1 truncate">
-        <CwdBreadcrumb cwd={cwd} home={home} onCd={onCd} />
+        <CwdBreadcrumb cwd={cwd} filePath={filePath} home={home} onCd={onCd} />
       </div>
       <div className="shrink-0">
         <AiTools
