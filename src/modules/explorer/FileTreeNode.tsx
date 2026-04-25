@@ -73,10 +73,10 @@ function FileTreeNodeImpl({
         <ContextMenuTrigger asChild>
           {isRenaming ? (
             <div
-              className="flex w-full items-center gap-1.5 px-1.5 py-0.5 text-xs"
+              className="flex w-full items-center gap-2 px-1.5 py-1 text-[13px]"
               style={{ paddingLeft: 6 + depth * 12 }}
             >
-              <span className="size-3 shrink-0" />
+              <span className="size-3.5 shrink-0" />
               {iconUrl ? (
                 <img src={iconUrl} alt="" className="size-4 shrink-0" />
               ) : (
@@ -94,15 +94,15 @@ function FileTreeNodeImpl({
               onClick={handleClick}
               onDoubleClick={() => !isDir && tree.beginRename(path)}
               className={cn(
-                "group flex w-full items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-left text-xs text-foreground/85 transition-colors hover:bg-accent/70 cursor-pointer",
+                "group flex w-full items-center gap-2 rounded-sm px-1.5 py-0.5 text-left text-[13px] text-foreground/85 transition-colors hover:bg-accent/70 cursor-pointer",
               )}
               style={{ paddingLeft: 6 + depth * 12 }}
             >
-              <span className="flex size-3 shrink-0 items-center justify-center text-muted-foreground">
+              <span className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
                 {isDir ? (
                   <HugeiconsIcon
                     icon={ArrowRight01Icon}
-                    size={10}
+                    size={12}
                     strokeWidth={2.25}
                     className={cn(
                       "transition-transform",

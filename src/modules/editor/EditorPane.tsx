@@ -5,7 +5,9 @@ import {
   setSearchQuery,
 } from "@codemirror/search";
 import { keymap } from "@codemirror/view";
-import { githubDark } from "@uiw/codemirror-theme-github";
+// import { aura } from "@uiw/codemirror-theme-aura";
+// import { tokyoNight } from "@uiw/codemirror-theme-tokyo-night";
+import { atomone } from "@uiw/codemirror-theme-atomone";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import {
   forwardRef,
@@ -14,10 +16,7 @@ import {
   useMemo,
   useRef,
 } from "react";
-import {
-  buildSharedExtensions,
-  languageCompartment,
-} from "./lib/extensions";
+import { buildSharedExtensions, languageCompartment } from "./lib/extensions";
 import { resolveLanguage } from "./lib/languageResolver";
 import { useDocument } from "./lib/useDocument";
 
@@ -162,7 +161,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           ref={cmRef}
           value={doc.content}
           onChange={onChange}
-          theme={githubDark}
+          theme={atomone}
           extensions={extensions}
           height="100%"
           className="flex-1 min-h-0 overflow-hidden"
