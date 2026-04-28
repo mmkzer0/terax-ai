@@ -1,10 +1,14 @@
-export { AiInput } from "./components/AiInput";
-export { AiPanel } from "./components/AiPanel";
+export { AgentRunBridge } from "./components/AgentRunBridge";
+export { AgentStatusPill } from "./components/AgentStatusPill";
+export { AiInputBar } from "./components/AiInputBar";
+export { AiMiniWindow } from "./components/AiMiniWindow";
+export { SelectionAskAi } from "./components/SelectionAskAi";
 export { getOpenAiKey, hasOpenAiKey } from "./lib/keyring";
 export {
-  dropChat,
   getOrCreateChat,
-  sendToTab,
-  stopTab,
+  sendMessage,
+  stop,
   useChatStore,
+  type AgentMeta,
+  type AgentRunStatus,
 } from "./store/chatStore";

@@ -10,11 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  AiBrain01Icon,
-  ViewIcon,
-  ViewOffSlashIcon,
-} from "@hugeicons/core-free-icons";
+import { ViewIcon, ViewOffSlashIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useState } from "react";
 import { setOpenAiKey } from "../lib/keyring";
@@ -73,8 +69,11 @@ export function ApiKeyDialog({ open, onOpenChange, onSaved }: Props) {
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <div className="mb-1 flex size-8 items-center justify-center rounded-md bg-accent text-accent-foreground">
-            <HugeiconsIcon icon={AiBrain01Icon} size={16} strokeWidth={1.75} />
+          <div className="mb-1 flex items-center gap-2">
+            <img src="/logo.png" alt="" className="size-5" draggable={false} />
+            <span className="text-[11px] font-medium tracking-tight text-muted-foreground">
+              Terax
+            </span>
           </div>
           <DialogTitle>Connect OpenAI</DialogTitle>
           <DialogDescription>

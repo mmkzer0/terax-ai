@@ -22,8 +22,6 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Spinner } from "@/components/ui/spinner";
-import { AiBrain01Icon, AiMagicIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type {
   ChatStatus,
   DynamicToolUIPart,
@@ -67,9 +65,6 @@ export function AiChatView({
       <Conversation>
         <ConversationContent>
           <ConversationEmptyState
-            icon={
-              <HugeiconsIcon icon={AiMagicIcon} size={20} strokeWidth={1.5} />
-            }
             title="Ask Terax anything"
             description="Explain command output, fix errors, generate snippets, or run a task."
           />
@@ -141,12 +136,6 @@ function RenderedMessage({
   return (
     <Message from={message.role}>
       <MessageContent>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <div className="flex size-5 items-center justify-center rounded bg-accent text-accent-foreground">
-            <HugeiconsIcon icon={AiBrain01Icon} size={11} strokeWidth={1.75} />
-          </div>
-          <span>Terax</span>
-        </div>
         <div className="flex flex-col gap-3">
           {message.parts.map((part, i) => (
             <RenderedPart

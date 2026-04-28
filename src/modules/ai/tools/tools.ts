@@ -29,12 +29,22 @@ export type ToolContext = {
   getCwd: () => string | null;
   /** Last N lines of the active terminal buffer (or null if not a terminal tab). */
   getTerminalContext: () => string | null;
+  /**
+   * Type a string into the active terminal at the prompt — without executing.
+   * Returns false if there is no active terminal tab to inject into.
+   * Used by `suggest_command` so command-shaped answers land at the user's
+   * prompt, ready to inspect and run with ↵.
+   */
+  injectIntoActivePty: (text: string) => boolean;
 };
 
 function resolvePath(rawPath: string, cwd: string | null): string {
   if (rawPath.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(rawPath))
     return rawPath;
-  if (!cwd) throw new Error("relative path requires an active terminal cwd");
+  if (!cwd)
+    throw new Error(
+      `cannot resolve relative path "${rawPath}": no active terminal cwd. Pass an absolute path.`,
+    );
   const sep = cwd.includes("\\") && !cwd.includes("/") ? "\\" : "/";
   return cwd.endsWith(sep) ? `${cwd}${rawPath}` : `${cwd}${sep}${rawPath}`;
 }
@@ -93,17 +103,6 @@ export function buildTools(ctx: ToolContext) {
       },
     }),
 
-    get_terminal_context: tool({
-      description:
-        "Return the recent visible buffer of the active terminal (last few hundred lines). Use this to understand commands the user just ran and their output.",
-      inputSchema: z.object({}),
-      execute: async () => {
-        const ctxText = ctx.getTerminalContext();
-        if (!ctxText) return { error: "no active terminal" };
-        return { content: ctxText };
-      },
-    }),
-
     write_file: tool({
       description:
         "Create or overwrite a file with the given content. Always asks the user before running.",
@@ -142,6 +141,34 @@ export function buildTools(ctx: ToolContext) {
         } catch (e) {
           return { error: String(e), path: abs };
         }
+      },
+    }),
+
+    suggest_command: tool({
+      description:
+        "Type a single shell command into the user's active terminal at the prompt — WITHOUT executing it. Use this when the answer to the user's question IS a command (e.g. 'ffmpeg one-liner for X', 'git command to undo Y'). Prefer this over prose. Do NOT include a trailing newline.",
+      inputSchema: z.object({
+        command: z
+          .string()
+          .describe("The shell command. No trailing newline."),
+        explanation: z
+          .string()
+          .optional()
+          .describe(
+            "Optional one-line note shown alongside in the chat log (not in the terminal).",
+          ),
+      }),
+      execute: async ({ command, explanation }) => {
+        const safety = checkShellCommand(command);
+        if (!safety.ok) return { error: safety.reason };
+        const trimmed = command.replace(/\n+$/, "");
+        const ok = ctx.injectIntoActivePty(trimmed);
+        if (!ok)
+          return {
+            error: "no active terminal to inject into",
+            command: trimmed,
+          };
+        return { command: trimmed, explanation, injected: true };
       },
     }),
 

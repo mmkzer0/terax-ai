@@ -5,7 +5,17 @@ import {
 } from "@/components/ui/resizable";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { AiPanel, dropChat, useChatStore } from "@/modules/ai";
+import {
+  AgentRunBridge,
+  AiInputBar,
+  AiMiniWindow,
+  SelectionAskAi,
+  useChatStore,
+} from "@/modules/ai";
+import { AiComposerProvider } from "@/modules/ai/lib/composer";
+import { ApiKeyDialog } from "@/modules/ai/components/ApiKeyDialog";
+import { AiInputBarConnect } from "@/modules/ai/components/AiInputBar";
+import { getOpenAiKey } from "@/modules/ai/lib/keyring";
 import { EditorStack, type EditorPaneHandle } from "@/modules/editor";
 import { FileExplorer } from "@/modules/explorer";
 import {
@@ -27,7 +37,7 @@ import {
 import { ThemeProvider } from "@/modules/theme";
 import { homeDir } from "@tauri-apps/api/path";
 import type { SearchAddon } from "@xterm/addon-search";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 
@@ -67,10 +77,33 @@ export default function App() {
   }, []);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const aiOpen = useChatStore((s) => s.panelOpen);
-  const togglePanel = useChatStore((s) => s.togglePanel);
-  const closePanel = useChatStore((s) => s.closePanel);
+  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const miniOpen = useChatStore((s) => s.mini.open);
+  const openMini = useChatStore((s) => s.openMini);
+  const focusInput = useChatStore((s) => s.focusInput);
+  const openPanel = useChatStore((s) => s.openPanel);
+  const panelOpen = useChatStore((s) => s.panelOpen);
+  const apiKey = useChatStore((s) => s.apiKey);
+  const setApiKey = useChatStore((s) => s.setApiKey);
   const setLive = useChatStore((s) => s.setLive);
+
+  const [keyLoaded, setKeyLoaded] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    getOpenAiKey().then((k) => {
+      if (!alive) return;
+      setApiKey(k);
+      setKeyLoaded(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [setApiKey]);
+
+  const hydrateSessions = useChatStore((s) => s.hydrateSessions);
+  useEffect(() => {
+    void hydrateSessions();
+  }, [hydrateSessions]);
 
   const activeTab = tabs.find((t) => t.id === activeId);
   const isTerminalTab = activeTab?.kind === "terminal";
@@ -100,10 +133,9 @@ export default function App() {
       searchAddons.current.delete(id);
       terminalRefs.current.delete(id);
       editorRefs.current.delete(id);
-      dropChat(id);
       closeTab(id);
     },
-    [closeTab, dropChat],
+    [closeTab],
   );
 
   const handleClose = useCallback(
@@ -142,13 +174,105 @@ export default function App() {
     return null;
   }, [tabs, activeId]);
 
-  const toggleAi = useCallback(() => {
+  const togglePanelAndFocus = useCallback(() => {
+    if (!apiKey) {
+      setApiKeyDialogOpen(true);
+      return;
+    }
+    if (panelOpen) {
+      useChatStore.getState().closePanel();
+    } else {
+      openPanel();
+      focusInput(null);
+    }
+  }, [apiKey, panelOpen, openPanel, focusInput]);
+
+  const attachSelection = useChatStore((s) => s.attachSelection);
+
+  const askFromSelection = useCallback(() => {
+    if (!apiKey) {
+      setApiKeyDialogOpen(true);
+      return;
+    }
     const selection = captureActiveSelection();
-    const prefill = selection
-      ? `> ${selection.trim().split("\n").join("\n> ")}\n\n`
-      : null;
-    togglePanel(prefill);
-  }, [captureActiveSelection, togglePanel]);
+    if (!selection || !selection.trim()) {
+      focusInput(null);
+      return;
+    }
+    const source: "terminal" | "editor" =
+      activeTab?.kind === "editor" ? "editor" : "terminal";
+    attachSelection(selection, source);
+  }, [apiKey, captureActiveSelection, focusInput, attachSelection, activeTab]);
+
+  const [askPopup, setAskPopup] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let pressed = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    const isInsideAi = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      return !!(
+        el.closest("[data-selection-ask-ai]") ||
+        el.closest("[data-ai-input-bar]") ||
+        el.closest("[data-ai-mini-window]")
+      );
+    };
+
+    const refreshPopup = (x: number, y: number) => {
+      const text = captureActiveSelection();
+      if (text && text.trim().length > 0) {
+        setAskPopup({ x, y });
+      } else {
+        setAskPopup(null);
+      }
+    };
+
+    const onDown = (e: MouseEvent) => {
+      if (isInsideAi(e.target)) return;
+      pressed = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      setAskPopup(null);
+    };
+    const onMove = (e: MouseEvent) => {
+      if (!pressed) return;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      // Cheap: defer to next frame so xterm/CodeMirror have already
+      // committed the selection before we read it back.
+      requestAnimationFrame(() => refreshPopup(lastX, lastY));
+    };
+    const onUp = (e: MouseEvent) => {
+      pressed = false;
+      if (isInsideAi(e.target)) return;
+      setTimeout(() => refreshPopup(e.clientX, e.clientY), 0);
+    };
+    const onSelChange = () => {
+      if (!pressed) return;
+      requestAnimationFrame(() => refreshPopup(lastX, lastY));
+    };
+
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("selectionchange", onSelChange);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("selectionchange", onSelChange);
+    };
+  }, [captureActiveSelection]);
+
+  const onAskFromSelection = useCallback(() => {
+    askFromSelection();
+    setAskPopup(null);
+  }, [askFromSelection]);
 
   const openNewTab = useCallback(() => {
     newTab(inheritedCwdForNewTab());
@@ -236,7 +360,8 @@ export default function App() {
       "tab.prev": () => cycleTab(-1),
       "tab.selectByIndex": (e) => selectByIndex(parseInt(e.key, 10) - 1),
       "search.focus": () => searchInlineRef.current?.focus(),
-      "ai.toggle": toggleAi,
+      "ai.toggle": togglePanelAndFocus,
+      "ai.askSelection": askFromSelection,
       "shortcuts.open": () => setShortcutsOpen((v) => !v),
       "sidebar.toggle": toggleSidebar,
     }),
@@ -246,7 +371,8 @@ export default function App() {
       handleClose,
       openNewTab,
       selectByIndex,
-      toggleAi,
+      togglePanelAndFocus,
+      askFromSelection,
       toggleSidebar,
     ],
   );
@@ -292,20 +418,45 @@ export default function App() {
     activeTab?.kind === "terminal" ? (activeTab.cwd ?? null) : null;
 
   useEffect(() => {
+    const findCwd = () => {
+      const active = tabs.find((x) => x.id === activeId);
+      if (active?.kind === "terminal" && active.cwd) return active.cwd;
+      // Fall back to the most-recently-active terminal tab's cwd, then the
+      // workspace root, then the home dir. This keeps `run_command` anchored
+      // when the user is on an editor tab or a terminal that hasn't reported
+      // a cwd yet, instead of letting Rust default to the app's own dir.
+      for (let i = tabs.length - 1; i >= 0; i--) {
+        const t = tabs[i];
+        if (t.kind === "terminal" && t.cwd) return t.cwd;
+      }
+      return explorerRoot ?? home ?? null;
+    };
+
     setLive({
-      getCwd: () => {
-        const t = tabs.find((x) => x.id === activeId);
-        return t?.kind === "terminal" ? (t.cwd ?? null) : null;
-      },
+      getCwd: findCwd,
       getTerminalContext: () => {
         const t = tabs.find((x) => x.id === activeId);
         if (t?.kind !== "terminal") return null;
         return terminalRefs.current.get(activeId)?.getBuffer(300) ?? null;
       },
+      injectIntoActivePty: (text) => {
+        const t = tabs.find((x) => x.id === activeId);
+        if (t?.kind !== "terminal") return false;
+        const term = terminalRefs.current.get(activeId);
+        if (!term) return false;
+        term.write(text);
+        term.focus();
+        return true;
+      },
+      getWorkspaceRoot: () => explorerRoot ?? home ?? null,
+      getActiveFile: () => {
+        const t = tabs.find((x) => x.id === activeId);
+        return t?.kind === "editor" ? t.path : null;
+      },
     });
-  }, [setLive, activeId, tabs]);
+  }, [setLive, activeId, tabs, explorerRoot, home]);
 
-  return (
+  const shell = (
     <ThemeProvider>
       <TooltipProvider>
         <div className="relative flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -352,71 +503,61 @@ export default function App() {
                 defaultSize="78%"
                 minSize="30%"
               >
-                <ResizablePanelGroup
-                  orientation="vertical"
-                  className="min-h-0 flex-1"
-                >
-                  <ResizablePanel
-                    id="main"
-                    defaultSize={aiOpen ? 60 : 100}
-                    minSize={25}
-                  >
-                    <div className="relative h-full">
-                      <div
-                        className={cn(
-                          "absolute inset-0 px-3 pt-2 pb-2",
-                          !isTerminalTab && "invisible pointer-events-none",
-                        )}
-                        aria-hidden={!isTerminalTab}
-                      >
-                        <TerminalStack
-                          tabs={tabs}
-                          activeId={activeId}
-                          registerHandle={registerTerminalHandle}
-                          onSearchReady={handleSearchReady}
-                          onCwd={handleTerminalCwd}
-                        />
-                      </div>
-                      <div
-                        className={cn(
-                          "absolute inset-0 px-3 pt-2 pb-2",
-                          !isEditorTab && "invisible pointer-events-none",
-                        )}
-                        aria-hidden={!isEditorTab}
-                      >
-                        <EditorStack
-                          tabs={tabs}
-                          activeId={activeId}
-                          registerHandle={registerEditorHandle}
-                          onDirtyChange={handleEditorDirty}
-                        />
-                      </div>
+                <div className="flex h-full min-h-0 flex-col">
+                  <div className="relative min-h-0 flex-1">
+                    <div
+                      className={cn(
+                        "absolute inset-0 px-3 pt-2 pb-2",
+                        !isTerminalTab && "invisible pointer-events-none",
+                      )}
+                      aria-hidden={!isTerminalTab}
+                    >
+                      <TerminalStack
+                        tabs={tabs}
+                        activeId={activeId}
+                        registerHandle={registerTerminalHandle}
+                        onSearchReady={handleSearchReady}
+                        onCwd={handleTerminalCwd}
+                      />
                     </div>
-                  </ResizablePanel>
-                  {aiOpen ? (
-                    <>
-                      <ResizableHandle />
-                      <ResizablePanel id="ai" defaultSize={40} minSize={20}>
-                        <motion.div
-                          key="ai-panel"
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{
-                            type: "spring",
-                            stiffness: 280,
-                            damping: 30,
-                          }}
-                          className="h-full"
-                        >
-                          <AiPanel
-                            tabId={activeId}
-                            onClose={closePanel}
+                    <div
+                      className={cn(
+                        "absolute inset-0 px-3 pt-2 pb-2",
+                        !isEditorTab && "invisible pointer-events-none",
+                      )}
+                      aria-hidden={!isEditorTab}
+                    >
+                      <EditorStack
+                        tabs={tabs}
+                        activeId={activeId}
+                        registerHandle={registerEditorHandle}
+                        onDirtyChange={handleEditorDirty}
+                      />
+                    </div>
+                  </div>
+
+                  <AnimatePresence initial={false}>
+                    {panelOpen && keyLoaded ? (
+                      <motion.div
+                        key="ai-panel"
+                        data-ai-input-bar
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                        className="overflow-hidden"
+                      >
+                        {apiKey ? (
+                          <AiInputBar />
+                        ) : (
+                          <AiInputBarConnect
+                            onAdd={() => setApiKeyDialogOpen(true)}
                           />
-                        </motion.div>
-                      </ResizablePanel>
-                    </>
-                  ) : null}
-                </ResizablePanelGroup>
+                        )}
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
               </ResizablePanel>
             </ResizablePanelGroup>
           </main>
@@ -426,18 +567,49 @@ export default function App() {
             filePath={activeFilePath}
             home={home}
             onCd={sendCd}
-            aiOpen={aiOpen}
-            canSubmit={true}
-            onOpenAi={toggleAi}
-            onSubmit={toggleAi}
+            onOpenMini={openMini}
+            hasComposer={!!apiKey}
           />
+
+          {apiKey ? <AgentRunBridge apiKey={apiKey} /> : null}
+
+          <AnimatePresence>
+            {miniOpen && apiKey ? (
+              <AiMiniWindow key="ai-mini" apiKey={apiKey} />
+            ) : null}
+            {askPopup ? (
+              <SelectionAskAi
+                key="ask-ai-popup"
+                x={askPopup.x}
+                y={askPopup.y}
+                onAsk={onAskFromSelection}
+                onDismiss={() => setAskPopup(null)}
+              />
+            ) : null}
+          </AnimatePresence>
 
           <ShortcutsDialog
             open={shortcutsOpen}
             onOpenChange={setShortcutsOpen}
           />
+
+          <ApiKeyDialog
+            open={apiKeyDialogOpen}
+            onOpenChange={setApiKeyDialogOpen}
+            onSaved={(k) => {
+              setApiKey(k);
+              openPanel();
+            }}
+          />
         </div>
       </TooltipProvider>
     </ThemeProvider>
   );
+
+  // Mount the composer provider whenever an API key exists — independent of
+  // panelOpen — so toggling the panel never re-mounts terminals/editors.
+  if (apiKey) {
+    return <AiComposerProvider apiKey={apiKey}>{shell}</AiComposerProvider>;
+  }
+  return shell;
 }

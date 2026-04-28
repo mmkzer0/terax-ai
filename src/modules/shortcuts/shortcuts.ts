@@ -15,6 +15,7 @@ export type ShortcutId =
   | "tab.selectByIndex"
   | "search.focus"
   | "ai.toggle"
+  | "ai.askSelection"
   | "shortcuts.open"
   | "sidebar.toggle";
 
@@ -87,6 +88,13 @@ export const SHORTCUTS: Shortcut[] = [
     keys: ["⌘", "I"],
     group: "AI",
     match: (e) => isMod(e) && e.key.toLowerCase() === "i",
+  },
+  {
+    id: "ai.askSelection",
+    label: "Ask AI about selection",
+    keys: ["⌘", "L"],
+    group: "AI",
+    match: (e) => isMod(e) && e.key.toLowerCase() === "l",
   },
   {
     id: "sidebar.toggle",
