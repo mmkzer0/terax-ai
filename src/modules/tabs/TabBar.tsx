@@ -14,6 +14,7 @@ import {
   Folder02Icon,
   ComputerTerminal02Icon,
   Globe02Icon,
+  PencilEdit02Icon,
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -26,6 +27,7 @@ type Props = {
   onSelect: (id: number) => void;
   onNew: () => void;
   onNewPreview: () => void;
+  onNewEditor: () => void;
   onClose: (id: number) => void;
   compact?: boolean;
 };
@@ -36,6 +38,7 @@ export function TabBar({
   onSelect,
   onNew,
   onNewPreview,
+  onNewEditor,
   onClose,
   compact,
 }: Props) {
@@ -142,6 +145,15 @@ export function TabBar({
               <span className="flex-1">Terminal</span>
               <span className="text-xs text-muted-foreground">⌘T</span>
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onNewEditor()}>
+              <HugeiconsIcon
+                icon={PencilEdit02Icon}
+                size={14}
+                strokeWidth={1.75}
+              />
+              <span className="flex-1">Editor</span>
+              <span className="text-xs text-muted-foreground">⌘E</span>
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewPreview()}>
               <HugeiconsIcon
                 icon={Globe02Icon}
@@ -149,6 +161,7 @@ export function TabBar({
                 strokeWidth={1.75}
               />
               <span className="flex-1">Preview</span>
+              <span className="text-xs text-muted-foreground">⌘P</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

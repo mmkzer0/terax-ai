@@ -63,6 +63,7 @@ pub fn run() {
             fs::mutate::fs_create_dir,
             fs::mutate::fs_rename,
             fs::mutate::fs_delete,
+            fs::search::fs_search,
             shell::shell_run_command,
             open_settings_window,
         ])

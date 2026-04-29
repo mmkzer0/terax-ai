@@ -14,16 +14,20 @@ import {
   SelectionAskAi,
   useChatStore,
 } from "@/modules/ai";
-import { AiComposerProvider } from "@/modules/ai/lib/composer";
 import { AiInputBarConnect } from "@/modules/ai/components/AiInputBar";
-import { EditorStack, type EditorPaneHandle } from "@/modules/editor";
+import { AiComposerProvider } from "@/modules/ai/lib/composer";
+import {
+  EditorStack,
+  NewEditorDialog,
+  type EditorPaneHandle,
+} from "@/modules/editor";
 import { FileExplorer } from "@/modules/explorer";
-import { PreviewStack, type PreviewPaneHandle } from "@/modules/preview";
 import {
   Header,
   type SearchInlineHandle,
   type SearchTarget,
 } from "@/modules/header";
+import { PreviewStack, type PreviewPaneHandle } from "@/modules/preview";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { onKeysChanged } from "@/modules/settings/store";
@@ -34,10 +38,7 @@ import {
 } from "@/modules/shortcuts";
 import { StatusBar } from "@/modules/statusbar";
 import { useTabs, useWorkspaceCwd } from "@/modules/tabs";
-import {
-  TerminalStack,
-  type TerminalPaneHandle,
-} from "@/modules/terminal";
+import { TerminalStack, type TerminalPaneHandle } from "@/modules/terminal";
 import { ThemeProvider } from "@/modules/theme";
 import { homeDir } from "@tauri-apps/api/path";
 import type { SearchAddon } from "@xterm/addon-search";
@@ -97,6 +98,7 @@ export default function App() {
   }, []);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [newEditorOpen, setNewEditorOpen] = useState(false);
   const miniOpen = useChatStore((s) => s.mini.open);
   const openMini = useChatStore((s) => s.openMini);
   const focusInput = useChatStore((s) => s.focusInput);
@@ -263,17 +265,19 @@ export default function App() {
     const source: "terminal" | "editor" =
       activeTab?.kind === "editor" ? "editor" : "terminal";
     attachSelection(selection, source);
-  }, [hasComposer, captureActiveSelection, focusInput, attachSelection, activeTab]);
+  }, [
+    hasComposer,
+    captureActiveSelection,
+    focusInput,
+    attachSelection,
+    activeTab,
+  ]);
 
   const [askPopup, setAskPopup] = useState<{ x: number; y: number } | null>(
     null,
   );
 
   useEffect(() => {
-    let pressed = false;
-    let lastX = 0;
-    let lastY = 0;
-
     const isInsideAi = (t: EventTarget | null) => {
       const el = t as HTMLElement | null;
       if (!el) return false;
@@ -284,47 +288,28 @@ export default function App() {
       );
     };
 
-    const refreshPopup = (x: number, y: number) => {
-      const text = captureActiveSelection();
-      if (text && text.trim().length > 0) {
-        setAskPopup({ x, y });
-      } else {
-        setAskPopup(null);
-      }
-    };
-
     const onDown = (e: MouseEvent) => {
       if (isInsideAi(e.target)) return;
-      pressed = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
       setAskPopup(null);
     };
-    const onMove = (e: MouseEvent) => {
-      if (!pressed) return;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      requestAnimationFrame(() => refreshPopup(lastX, lastY));
-    };
     const onUp = (e: MouseEvent) => {
-      pressed = false;
       if (isInsideAi(e.target)) return;
-      setTimeout(() => refreshPopup(e.clientX, e.clientY), 0);
-    };
-    const onSelChange = () => {
-      if (!pressed) return;
-      requestAnimationFrame(() => refreshPopup(lastX, lastY));
+      // Defer one tick so xterm/CodeMirror finalize the selection.
+      setTimeout(() => {
+        const text = captureActiveSelection();
+        if (text && text.trim().length > 0) {
+          setAskPopup({ x: e.clientX, y: e.clientY });
+        } else {
+          setAskPopup(null);
+        }
+      }, 0);
     };
 
     document.addEventListener("mousedown", onDown);
-    document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-    document.addEventListener("selectionchange", onSelChange);
     return () => {
       document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
-      document.removeEventListener("selectionchange", onSelChange);
     };
   }, [captureActiveSelection]);
 
@@ -406,8 +391,7 @@ export default function App() {
     [tabs, disposeTab],
   );
 
-  const activeFilePath =
-    activeTab?.kind === "editor" ? activeTab.path : null;
+  const activeFilePath = activeTab?.kind === "editor" ? activeTab.path : null;
 
   const openPreviewTab = useCallback(
     (url: string) => {
@@ -425,6 +409,7 @@ export default function App() {
     () => ({
       "tab.new": openNewTab,
       "tab.newPreview": () => openPreviewTab(""),
+      "tab.newEditor": () => setNewEditorOpen(true),
       "tab.close": () => handleClose(activeId),
       "tab.next": () => cycleTab(1),
       "tab.prev": () => cycleTab(-1),
@@ -550,6 +535,7 @@ export default function App() {
             onSelect={setActiveId}
             onNew={openNewTab}
             onNewPreview={() => openPreviewTab("")}
+            onNewEditor={() => setNewEditorOpen(true)}
             onClose={handleClose}
             onToggleSidebar={toggleSidebar}
             onOpenShortcuts={() => setShortcutsOpen(true)}
@@ -566,9 +552,9 @@ export default function App() {
               <ResizablePanel
                 id="sidebar"
                 panelRef={sidebarRef}
-                defaultSize="22%"
-                minSize="14%"
-                maxSize="40%"
+                defaultSize="225px"
+                minSize="130px"
+                maxSize="450px"
                 collapsible
                 collapsedSize={0}
               >
@@ -583,11 +569,7 @@ export default function App() {
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle />
-              <ResizablePanel
-                id="workspace"
-                defaultSize="78%"
-                minSize="30%"
-              >
+              <ResizablePanel id="workspace" defaultSize="78%" minSize="30%">
                 <div className="flex h-full min-h-0 flex-col">
                   <div className="relative min-h-0 flex-1">
                     <div
@@ -693,6 +675,13 @@ export default function App() {
           <ShortcutsDialog
             open={shortcutsOpen}
             onOpenChange={setShortcutsOpen}
+          />
+
+          <NewEditorDialog
+            open={newEditorOpen}
+            onOpenChange={setNewEditorOpen}
+            rootPath={explorerRoot ?? home}
+            onCreated={(path) => openFileTab(path)}
           />
         </div>
       </TooltipProvider>
