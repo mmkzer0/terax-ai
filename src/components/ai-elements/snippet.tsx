@@ -8,7 +8,8 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckmarkCircle01Icon, CopyIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { ComponentProps } from "react";
 import {
   createContext,
@@ -128,7 +129,7 @@ export const SnippetCopyButton = ({
     []
   );
 
-  const Icon = isCopied ? CheckIcon : CopyIcon;
+  const Icon = isCopied ? CheckmarkCircle01Icon : CopyIcon;
 
   return (
     <InputGroupButton
@@ -139,7 +140,7 @@ export const SnippetCopyButton = ({
       title="Copy"
       {...props}
     >
-      {children ?? <Icon className="size-3.5" size={14} />}
+      {children ?? <HugeiconsIcon icon={Icon} size={14} className="size-3.5" />}
     </InputGroupButton>
   );
 };
