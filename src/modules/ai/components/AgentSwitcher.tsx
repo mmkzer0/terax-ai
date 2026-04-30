@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +31,7 @@ const ICONS: Record<AgentIconId, typeof CodeIcon> = {
   spark: SparklesIcon,
 };
 
-export function AgentSwitcher() {
+export function AgentSwitcher({ isMiniWindow }: { isMiniWindow?: boolean }) {
   // Subscribe to customAgents + activeId so the trigger updates live.
   const customAgents = useAgentsStore((s) => s.customAgents);
   const activeId = useAgentsStore((s) => s.activeId);
@@ -47,11 +48,13 @@ export function AgentSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
+        <Button
+          size="xs"
+          variant="secondary"
           className={cn(
-            "flex h-6 items-center gap-1 rounded-md border border-border/60 bg-card px-1.5 text-[10.5px] text-muted-foreground transition-colors",
-            "hover:border-border hover:bg-accent hover:text-foreground",
+            !isMiniWindow
+              ? "flex h-6 items-center gap-1 rounded-md border border-border/60 bg-card px-1.5 text-[10.5px] text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground"
+              : "text-xs",
           )}
           title={`Agent: ${active.name}`}
         >
@@ -63,7 +66,7 @@ export function AgentSwitcher() {
             strokeWidth={2}
             className="opacity-70"
           />
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-60">
         <div className="px-2 pt-1.5 pb-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">

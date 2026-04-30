@@ -92,17 +92,22 @@ export const PreviewPane = forwardRef<PreviewPaneHandle, Props>(
 
 function EmptyState() {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
-      <div className="flex size-10 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground">
-        <HugeiconsIcon icon={Globe02Icon} size={18} strokeWidth={1.5} />
+    <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <div className="flex size-12 items-center justify-center rounded-2xl border border-border/60 bg-card text-muted-foreground">
+        <HugeiconsIcon icon={Globe02Icon} size={20} strokeWidth={1.5} />
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <p className="text-sm font-medium text-foreground">
-          Enter a URL to preview
+          Nothing to preview yet
         </p>
-        <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
-          Local dev servers (vite, next, …) work best. Public sites usually
-          refuse to embed — use the link button to open them externally.
+        <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+          Type a URL above, or open the{" "}
+          <span className="rounded bg-muted px-1 py-0.5 font-mono text-[10.5px]">
+            Ports
+          </span>{" "}
+          dropdown to jump straight to your running dev server. Public sites
+          often block embedding — open them in your browser via the link icon
+          if you see a blank page.
         </p>
       </div>
     </div>

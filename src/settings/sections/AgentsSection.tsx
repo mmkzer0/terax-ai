@@ -526,8 +526,6 @@ function SnippetEditorDialog({
 
 function CustomInstructionsBlock({ value }: { value: string }) {
   const [draft, setDraft] = useState(value);
-  const [savedTick, setSavedTick] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hadFirstSync = useRef(false);
 
   useEffect(() => {
@@ -536,16 +534,6 @@ function CustomInstructionsBlock({ value }: { value: string }) {
       setDraft(value);
     }
   }, [value]);
-
-  const queueSave = (next: string) => {
-    setDraft(next);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      void setCustomInstructions(next).then(() => {
-        setSavedTick((n) => n + 1);
-      });
-    }, 350);
-  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -564,7 +552,7 @@ function CustomInstructionsBlock({ value }: { value: string }) {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         placeholder="e.g. Always reply in concise bullet points. Prefer pnpm over npm. My machine is an M-series Mac."
-        className="min-h-[100px] resize-y bg-card/60 font-sans text-[12px] leading-relaxed"
+        className="min-h-[100px] resize-y bg-card/60 font-sans text-[12px] leading-relaxed border border-border"
       />
     </div>
   );

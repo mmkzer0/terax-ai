@@ -25,6 +25,7 @@ import {
   StopCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { motion } from "motion/react";
 import { useRef } from "react";
 import {
   getModel,
@@ -48,7 +49,9 @@ const PROVIDER_ICON = {
 
 export function AiOpenButton({ onOpen }: { onOpen: () => void }) {
   return (
-    <button
+    <motion.button
+      initial={{ y: -15 }}
+      animate={{ y: 0 }}
       type="button"
       onClick={onOpen}
       className={cn(
@@ -59,7 +62,7 @@ export function AiOpenButton({ onOpen }: { onOpen: () => void }) {
     >
       <span>Open AI agent</span>
       <Kbd className="h-4 min-w-4 px-1">⌘I</Kbd>
-    </button>
+    </motion.button>
   );
 }
 
@@ -68,9 +71,23 @@ export function AiStatusBarControls() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const openMini = useChatStore((s) => s.openMini);
   const miniOpen = useChatStore((s) => s.mini.open);
+  const closePanel = useChatStore((s) => s.closePanel);
 
   return (
     <div className="flex items-center gap-0.5">
+      {/* <Button
+        onClick={closePanel}
+        title="Close AI panel"
+        size="xs"
+        variant="outline"
+        aria-label="Close AI panel"
+        className="text-[11px] text-foreground/85 pl-1.5"
+      > */}
+      {/* <Kbd className="h-4 gap-px text-[11px]">
+          ⌘<span className="font-mono">I</span>
+        </Kbd> */}
+      {/* Close */}
+      {/* </Button> */}
       <input
         ref={fileInputRef}
         type="file"
@@ -124,7 +141,19 @@ export function AiStatusBarControls() {
       <ModelDropdown />
 
       <span className="mx-1 h-8 w-px bg-border" aria-hidden />
-
+      <Button
+        onClick={closePanel}
+        title="Close AI panel"
+        size="xs"
+        variant="ghost"
+        aria-label="Close AI panel"
+        className="text-[11px] text-foreground/85 px-1"
+      >
+        <Kbd className="h-4 gap-px text-[11px]">
+          ⌘<span className="font-mono">I</span>
+        </Kbd>
+        {/* <HugeiconsIcon icon={Close} size={15} strokeWidth={1.75} /> */}
+      </Button>
       <IconBtn
         title={miniOpen ? "Mini-window open" : "Open conversation"}
         onClick={openMini}

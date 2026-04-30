@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { useWhisperRecording } from "../hooks/useWhisperRecording";
-import { expandSnippetTokens } from "../lib/snippets";
+import { expandSnippetTokens, type Snippet } from "../lib/snippets";
 import { getOrCreateChat, useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
 
@@ -42,6 +42,9 @@ type ComposerCtx = {
   /** Attach a file by absolute path — used by the file explorer's "Attach to Agent". */
   attachFileByPath: (path: string) => Promise<void>;
   removeFile: (id: string) => void;
+  pickedSnippets: Snippet[];
+  addSnippet: (s: Snippet) => void;
+  removeSnippet: (id: string) => void;
   isBusy: boolean;
   submit: () => void;
   stop: () => void;
@@ -69,6 +72,7 @@ export function AiComposerProvider({ children }: ProviderProps) {
 
   const [value, setValue] = useState("");
   const [files, setFiles] = useState<FileAttachment[]>([]);
+  const [pickedSnippets, setPickedSnippets] = useState<Snippet[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const focusSignal = useChatStore((s) => s.focusSignal);
@@ -146,6 +150,13 @@ export function AiComposerProvider({ children }: ProviderProps) {
   const removeFile = (id: string) =>
     setFiles((prev) => prev.filter((f) => f.id !== id));
 
+  const addSnippet = (s: Snippet) =>
+    setPickedSnippets((prev) =>
+      prev.some((p) => p.id === s.id) ? prev : [...prev, s],
+    );
+  const removeSnippet = (id: string) =>
+    setPickedSnippets((prev) => prev.filter((s) => s.id !== id));
+
   const attachFileByPath = async (path: string) => {
     try {
       type ReadResult =
@@ -182,7 +193,7 @@ export function AiComposerProvider({ children }: ProviderProps) {
   const submit = () => {
     if (isBusy) return;
     const trimmed = value.trim();
-    if (!trimmed && files.length === 0) return;
+    if (!trimmed && files.length === 0 && pickedSnippets.length === 0) return;
 
     const parts: MessagePart[] = [];
     const fileBlocks = files
@@ -201,8 +212,23 @@ export function AiComposerProvider({ children }: ProviderProps) {
       trimmed,
       useSnippetsStore.getState().snippets,
     );
+    const seenHandles = new Set<string>();
+    const allSnippetBlocks: string[] = [];
+    for (const s of pickedSnippets) {
+      if (seenHandles.has(s.handle)) continue;
+      seenHandles.add(s.handle);
+      allSnippetBlocks.push(
+        `<snippet name="${s.handle}">\n${s.content}\n</snippet>`,
+      );
+    }
+    for (const block of snippetBlocks) {
+      const m = block.match(/^<snippet name="([^"]+)"/);
+      if (m && seenHandles.has(m[1])) continue;
+      if (m) seenHandles.add(m[1]);
+      allSnippetBlocks.push(block);
+    }
     const composed = [
-      snippetBlocks.join("\n\n"),
+      allSnippetBlocks.join("\n\n"),
       selectionBlocks.join("\n\n"),
       fileBlocks.join("\n\n"),
       bodyAfterTokens,
@@ -229,6 +255,7 @@ export function AiComposerProvider({ children }: ProviderProps) {
     >[0]);
     setValue("");
     setFiles([]);
+    setPickedSnippets([]);
   };
 
   const stop = () => {
@@ -236,7 +263,11 @@ export function AiComposerProvider({ children }: ProviderProps) {
     void getOrCreateChat(sessionId).stop();
   };
 
-  const canSend = !isBusy && (value.trim().length > 0 || files.length > 0);
+  const canSend =
+    !isBusy &&
+    (value.trim().length > 0 ||
+      files.length > 0 ||
+      pickedSnippets.length > 0);
 
   const ctx: ComposerCtx = {
     textareaRef,
@@ -246,6 +277,9 @@ export function AiComposerProvider({ children }: ProviderProps) {
     addFiles,
     attachFileByPath,
     removeFile,
+    pickedSnippets,
+    addSnippet,
+    removeSnippet,
     isBusy,
     submit,
     stop,

@@ -17,6 +17,7 @@ import {
   ArrowDown01Icon,
   Folder01Icon,
   Home03Icon,
+  MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { invoke } from "@tauri-apps/api/core";
@@ -47,16 +48,32 @@ export function CwdBreadcrumb({ cwd, filePath, home, onCd }: Props) {
     const dir = dirname(filePath);
     const name = basename(filePath);
     const segments = segmentsFromCwd(dir, home);
+    const first = segments[0];
+    const middle = segments.slice(1);
     return (
       <Breadcrumb>
         <BreadcrumbList className="gap-1 text-xs sm:gap-1.5">
-          {segments.map((s) => (
+          {first ? (
             <BreadcrumbSegment
-              key={s.fullPath}
-              label={s.label}
-              isHome={s.isHome}
-              onClick={() => onCd(s.fullPath)}
+              label={first.label}
+              isHome={first.isHome}
+              onClick={() => onCd(first.fullPath)}
             />
+          ) : null}
+          {middle.length > 0 ? (
+            <CollapsedSegments segments={middle} onCd={onCd} />
+          ) : null}
+          {middle.map((s) => (
+            <span
+              key={s.fullPath}
+              className="contents max-md:hidden"
+            >
+              <BreadcrumbSegment
+                label={s.label}
+                isHome={s.isHome}
+                onClick={() => onCd(s.fullPath)}
+              />
+            </span>
           ))}
           <BreadcrumbItem>
             <BreadcrumbPage className="text-foreground">{name}</BreadcrumbPage>
@@ -76,16 +93,29 @@ export function CwdBreadcrumb({ cwd, filePath, home, onCd }: Props) {
   const current = segments[segments.length - 1];
   const parents = segments.slice(0, -1);
 
+  const firstParent = parents[0];
+  const middleParents = parents.slice(1);
   return (
     <Breadcrumb>
       <BreadcrumbList className="gap-1 text-xs sm:gap-1.5">
-        {parents.map((s) => (
+        {firstParent ? (
           <BreadcrumbSegment
-            key={s.fullPath}
-            label={s.label}
-            isHome={s.isHome}
-            onClick={() => onCd(s.fullPath)}
+            label={firstParent.label}
+            isHome={firstParent.isHome}
+            onClick={() => onCd(firstParent.fullPath)}
           />
+        ) : null}
+        {middleParents.length > 0 ? (
+          <CollapsedSegments segments={middleParents} onCd={onCd} />
+        ) : null}
+        {middleParents.map((s) => (
+          <span key={s.fullPath} className="contents max-md:hidden">
+            <BreadcrumbSegment
+              label={s.label}
+              isHome={s.isHome}
+              onClick={() => onCd(s.fullPath)}
+            />
+          </span>
         ))}
         <BreadcrumbItem>
           <CurrentSegmentDropdown
@@ -217,5 +247,51 @@ function CurrentSegmentDropdown({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function CollapsedSegments({
+  segments,
+  onCd,
+}: {
+  segments: { fullPath: string; label: string; isHome: boolean }[];
+  onCd: (p: string) => void;
+}) {
+  return (
+    <span className="contents md:hidden">
+      <BreadcrumbItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="Show hidden folders"
+              className="flex items-center rounded-sm px-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <HugeiconsIcon
+                icon={MoreHorizontalIcon}
+                className="size-3"
+                strokeWidth={1.75}
+              />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-44">
+            {segments.map((s) => (
+              <DropdownMenuItem
+                key={s.fullPath}
+                onSelect={() => onCd(s.fullPath)}
+              >
+                <HugeiconsIcon
+                  icon={s.isHome ? Home03Icon : Folder01Icon}
+                  className="size-3.5 text-muted-foreground"
+                  strokeWidth={1.75}
+                />
+                <span className="truncate">{s.isHome ? "Home" : s.label}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </BreadcrumbItem>
+      <BreadcrumbSeparator className="[&>svg]:size-3" />
+    </span>
   );
 }

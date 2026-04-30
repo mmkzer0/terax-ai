@@ -678,27 +678,27 @@ export default function App() {
                     </div>
                   </div>
 
-                  <AnimatePresence initial={false}>
-                    {panelOpen && keysLoaded ? (
-                      <motion.div
-                        key="ai-panel"
-                        data-ai-input-bar
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                        className="overflow-hidden"
-                      >
-                        {hasComposer ? (
-                          <AiInputBar />
-                        ) : (
-                          <AiInputBarConnect
-                            onAdd={() => void openSettingsWindow("models")}
-                          />
-                        )}
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
+                  {keysLoaded ? (
+                    <motion.div
+                      data-ai-input-bar
+                      initial={false}
+                      animate={{
+                        height: panelOpen ? "auto" : 0,
+                        opacity: panelOpen ? 1 : 0,
+                      }}
+                      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                      className="overflow-hidden"
+                      aria-hidden={!panelOpen}
+                    >
+                      {hasComposer ? (
+                        <AiInputBar />
+                      ) : (
+                        <AiInputBarConnect
+                          onAdd={() => void openSettingsWindow("models")}
+                        />
+                      )}
+                    </motion.div>
+                  ) : null}
                 </div>
               </ResizablePanel>
             </ResizablePanelGroup>

@@ -1,13 +1,14 @@
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import type { ThemePref } from "@/modules/settings/store";
 import {
   EDITOR_THEME_LABELS,
   EDITOR_THEMES,
@@ -28,9 +29,12 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect } from "react";
 import { SectionHeader } from "../components/SectionHeader";
 import { SettingRow } from "../components/SettingRow";
-import type { ThemePref } from "@/modules/settings/store";
 
-const APPEARANCE: { id: ThemePref; label: string; icon: typeof ComputerIcon }[] = [
+const APPEARANCE: {
+  id: ThemePref;
+  label: string;
+  icon: typeof ComputerIcon;
+}[] = [
   { id: "system", label: "System", icon: ComputerIcon },
   { id: "light", label: "Light", icon: Sun03Icon },
   { id: "dark", label: "Dark", icon: Moon02Icon },
@@ -72,7 +76,7 @@ export function GeneralSection() {
   const onPickEditor = (id: EditorThemeId) => void setEditorTheme(id);
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-6">
       <SectionHeader
         title="General"
         description="Appearance, editor, and startup."
@@ -168,4 +172,3 @@ function Label({ children }: { children: React.ReactNode }) {
     </span>
   );
 }
-

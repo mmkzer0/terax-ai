@@ -11,26 +11,51 @@ import { cn } from "@/lib/utils";
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import {
   Add01Icon,
+  AlertCircleIcon,
   ArrowDown01Icon,
   Cancel01Icon,
   Delete02Icon,
+  FilterIcon,
+  TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { motion } from "motion/react";
 import { useEffect, useMemo } from "react";
 import type { SessionMeta } from "../lib/sessions";
+import { useAgentsStore } from "../store/agentsStore";
 import { getOrCreateChat, useChatStore } from "../store/chatStore";
+import { AgentSwitcher } from "./AgentSwitcher";
 import { AiChatView } from "./AiChat";
 
 const SUGGESTIONS = [
-  { label: "Explain the last error", text: "Explain the last error in the terminal." },
-  { label: "Generate a command", text: "Give me a command to " },
-  { label: "Summarize buffer", text: "Summarize what just happened in the terminal." },
+  {
+    label: "Explain the last error",
+    hint: "Read the terminal buffer",
+    icon: AlertCircleIcon,
+    text: "Explain the last error in the terminal.",
+  },
+  {
+    label: "Generate a command",
+    hint: "Tell me what you want to do",
+    icon: TerminalIcon,
+    text: "Give me a command to ",
+  },
+  {
+    label: "Summarize buffer",
+    hint: "Recap recent activity",
+    icon: FilterIcon,
+    text: "Summarize what just happened in the terminal.",
+  },
 ];
 
 export function AiMiniWindow() {
   const closeMini = useChatStore((s) => s.closeMini);
   const sessionId = useChatStore((s) => s.activeSessionId);
+  const openPanel = useChatStore((s) => s.openPanel);
+  const expandToPanel = () => {
+    closeMini();
+    openPanel();
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -54,14 +79,22 @@ export function AiMiniWindow() {
       data-ai-mini-window
       className={cn(
         "no-scrollbar-deep fixed right-4 bottom-12 z-40 flex h-[36rem] w-[28rem] flex-col overflow-hidden",
-        "rounded-xl border border-border/60 bg-card/95 shadow-2xl backdrop-blur-xl",
+        "rounded-xl border border-border/60 bg-card/95 shadow-2xl ring-1 ring-black/5 backdrop-blur-xl dark:ring-white/5",
         "text-[12px]",
       )}
     >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-primary/5 to-transparent"
+      />
       {sessionId ? (
-        <Body sessionId={sessionId} onClose={closeMini} />
+        <Body
+          sessionId={sessionId}
+          onClose={closeMini}
+          onExpand={expandToPanel}
+        />
       ) : (
-        <EmptyShell onClose={closeMini} />
+        <EmptyShell onClose={closeMini} onExpand={expandToPanel} />
       )}
     </motion.div>
   );
@@ -70,9 +103,11 @@ export function AiMiniWindow() {
 function Body({
   sessionId,
   onClose,
+  onExpand,
 }: {
   sessionId: string;
   onClose: () => void;
+  onExpand: () => void;
 }) {
   const focusInput = useChatStore((s) => s.focusInput);
   const step = useChatStore((s) => s.agentMeta.step);
@@ -84,7 +119,12 @@ function Body({
 
   return (
     <>
-      <Header step={step} isBusy={isBusy} onClose={onClose} />
+      <Header
+        step={step}
+        isBusy={isBusy}
+        onClose={onClose}
+        onExpand={onExpand}
+      />
 
       <div className="flex min-h-0 flex-1 flex-col">
         {helpers.messages.length === 0 ? (
@@ -106,10 +146,21 @@ function Body({
   );
 }
 
-function EmptyShell({ onClose }: { onClose: () => void }) {
+function EmptyShell({
+  onClose,
+  onExpand,
+}: {
+  onClose: () => void;
+  onExpand: () => void;
+}) {
   return (
     <>
-      <Header step={null} isBusy={false} onClose={onClose} />
+      <Header
+        step={null}
+        isBusy={false}
+        onClose={onClose}
+        onExpand={onExpand}
+      />
       <div className="flex flex-1 items-center justify-center text-[11px] text-muted-foreground">
         Loading sessions…
       </div>
@@ -125,36 +176,45 @@ function Header({
   step: string | null;
   isBusy: boolean;
   onClose: () => void;
+  onExpand: () => void;
 }) {
+  const customAgents = useAgentsStore((s) => s.customAgents);
+  void customAgents;
+
   return (
-    <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2.5">
-      <div className="flex min-w-0 items-center gap-2">
-        <img
-          src="/logo.png"
-          alt=""
-          className="size-3.5 shrink-0"
-          draggable={false}
-        />
-        <span className="text-[11px] font-semibold tracking-tight">Terax</span>
-        <SessionPicker />
-        {isBusy && (
+    <div className="relative flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2.5">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <AgentSwitcher isMiniWindow />
+        {/* <Badge variant="outline" className="size-7 p-0">
+          <HugeiconsIcon icon={AgentIcon} size={12} strokeWidth={1.75} />
+        </Badge> */}
+        {/* <div className="flex min-w-0 flex-col leading-tight">
+          <span className="text-[11px] font-semibold tracking-tight">
+            {activeAgent.name}
+          </span>
+        </div> */}
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        {isBusy ? (
           <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
             <Spinner className="size-2.5" />
             <span className="truncate">{step ?? "Thinking…"}</span>
           </span>
+        ) : (
+          <SessionPicker />
         )}
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          onClick={onClose}
+          className="size-5"
+          aria-label="Close"
+          title="Close (Esc)"
+        >
+          <HugeiconsIcon icon={Cancel01Icon} size={11} strokeWidth={1.75} />
+        </Button>
       </div>
-      <Button
-        type="button"
-        size="icon"
-        variant="ghost"
-        onClick={onClose}
-        className="size-5"
-        aria-label="Close"
-        title="Close (Esc)"
-      >
-        <HugeiconsIcon icon={Cancel01Icon} size={11} strokeWidth={1.75} />
-      </Button>
     </div>
   );
 }
@@ -177,7 +237,7 @@ function SessionPicker() {
         <button
           type="button"
           className={cn(
-            "flex min-w-0 max-w-[14rem] items-center gap-1 rounded-md px-1.5 py-0.5",
+            "flex min-w-0 max-w-[12rem] items-center gap-1 rounded-md px-1.5 py-0.5",
             "text-[10.5px] text-muted-foreground transition-colors",
             "hover:bg-accent hover:text-foreground",
           )}
@@ -264,25 +324,35 @@ function SessionRow({
 
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
+      <img src="/logo.png" alt="Terax" className="size-16" />
       <div className="space-y-1">
-        <p className="text-[12px] font-medium tracking-tight">
+        <p className="text-[13px] font-semibold tracking-tight">
           Ask Terax anything
         </p>
-        <p className="text-[10.5px] leading-relaxed text-muted-foreground">
-          Terax sees the active terminal — cwd and recent output.
+        <p className="max-w-xs text-[11px] leading-relaxed text-muted-foreground">
+          Terax sees the active terminal — cwd, last commands, and recent
+          output. Pick a starter or just type below.
         </p>
       </div>
-      <div className="flex flex-wrap justify-center gap-1">
+      <div className="flex w-full flex-col gap-2">
         {SUGGESTIONS.map((s) => (
-          <button
+          <Button
             key={s.label}
             type="button"
             onClick={() => onPick(s.text)}
-            className="rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10.5px] text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground"
+            className="group flex items-center gap-2.5 rounded-lg border border-border/60 bg-background/40 h-12 text-left transition-all hover:border-primary/20 hover:bg-accent"
           >
-            {s.label}
-          </button>
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
+              <HugeiconsIcon icon={s.icon} size={12} strokeWidth={1.75} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11.5px] font-medium text-foreground">
+                {s.label}
+              </div>
+              <div className="text-[10px] text-muted-foreground">{s.hint}</div>
+            </div>
+          </Button>
         ))}
       </div>
     </div>

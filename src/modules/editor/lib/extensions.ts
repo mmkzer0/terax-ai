@@ -58,7 +58,7 @@ export function buildSharedExtensions(): Extension[] {
         backgroundColor:
           "color-mix(in srgb, var(--foreground) 4%, transparent)",
       },
-      ".cm-activeLineGutter": {
+      ".cm-lineNumbers .cm-activeLineGutter": {
         borderTopLeftRadius: "5px",
         borderBottomLeftRadius: "5px",
         userSelect: "none",

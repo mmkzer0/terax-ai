@@ -1,41 +1,34 @@
+import { PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { motion } from "motion/react";
 import type { Snippet } from "../lib/snippets";
 
 type Props = {
-  open: boolean;
   snippets: readonly Snippet[];
   activeIndex: number;
-  onPick: (handle: string) => void;
+  onPick: (snippet: Snippet) => void;
   onHover: (index: number) => void;
 };
 
 /**
- * Inline floating snippet list. Does NOT take focus — the composer textarea
- * keeps focus and forwards Arrow/Enter keys to drive the active row.
+ * Body of the snippet picker. Render inside a `<Popover open={…}>` whose
+ * anchor wraps the textarea — that way it portals out of any clipped
+ * (overflow-hidden) ancestor and sits above the input.
  */
-export function SnippetPicker({
-  open,
+export function SnippetPickerContent({
   snippets,
   activeIndex,
   onPick,
   onHover,
 }: Props) {
-  if (!open) return null;
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 4 }}
-      transition={{ duration: 0.1 }}
-      className={cn(
-        "absolute bottom-full left-1 z-90 mb-1 w-72",
-        "overflow-hidden rounded-lg border border-border/60 bg-popover/95 shadow-xl backdrop-blur-xl",
-      )}
-      onMouseDown={(e) => {
-        // Prevent textarea from losing focus on click.
-        e.preventDefault();
-      }}
+    <PopoverContent
+      side="top"
+      align="start"
+      sideOffset={6}
+      onOpenAutoFocus={(e) => e.preventDefault()}
+      onCloseAutoFocus={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()}
+      className="w-72 overflow-hidden rounded-lg border border-border/60 bg-popover/95 p-0 shadow-xl backdrop-blur-xl"
     >
       {snippets.length === 0 ? (
         <div className="px-3 py-2.5 text-[11px] text-muted-foreground">
@@ -48,7 +41,7 @@ export function SnippetPicker({
               <button
                 type="button"
                 onMouseEnter={() => onHover(i)}
-                onClick={() => onPick(s.handle)}
+                onClick={() => onPick(s)}
                 className={cn(
                   "flex w-full flex-col items-start gap-0.5 px-2 py-1.5 text-left text-[12px]",
                   i === activeIndex ? "bg-accent" : "hover:bg-accent/60",
@@ -70,6 +63,6 @@ export function SnippetPicker({
           ))}
         </ul>
       )}
-    </motion.div>
+    </PopoverContent>
   );
 }
