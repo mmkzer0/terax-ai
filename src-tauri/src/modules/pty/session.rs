@@ -13,10 +13,15 @@ use super::shell_init;
 
 const FLUSH_INTERVAL: Duration = Duration::from_millis(8);
 const READ_BUF: usize = 16 * 1024;
-// Cap on buffered-but-not-yet-flushed bytes. On overflow we drop from the
-// front (oldest output) to keep memory bounded under runaway producers
-// (e.g. `yes`, fast `find /`). 4 MiB is ~1000 full 80x24 screens.
+// Cap on buffered-but-not-yet-flushed bytes. On overflow we discard the
+// entire pending buffer and emit an SGR-reset + notice in its place.
+// Dropping a partial prefix would slice a CSI sequence in half and corrupt
+// xterm's screen state. 4 MiB is ~1000 full 80x24 screens.
 const MAX_PENDING: usize = 4 * 1024 * 1024;
+// Hard reset (ESC c) + dim notice. Written verbatim into the stream when
+// we're forced to discard backlog.
+const OVERFLOW_NOTICE: &[u8] =
+    b"\x1bc\x1b[2m[terax: dropped output due to backpressure]\x1b[0m\r\n";
 
 #[derive(Serialize, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -29,6 +34,18 @@ pub struct Session {
     pub master: Mutex<Box<dyn MasterPty + Send>>,
     pub writer: Mutex<Box<dyn Write + Send>>,
     pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        // If the session Arc is dropped without an explicit pty_close (e.g.
+        // frontend disconnected, window crashed, dev HMR), the reader/flusher
+        // threads would otherwise stay alive forever holding the child. Kill
+        // the child here so the reader hits EOF and the threads unwind.
+        if let Ok(mut k) = self.killer.lock() {
+            let _ = k.kill();
+        }
+    }
 }
 
 pub fn spawn(
@@ -74,11 +91,13 @@ pub fn spawn(
                     Ok(0) => break,
                     Ok(n) => {
                         let mut g = pending_r.lock().unwrap();
-                        let overflow = (g.len() + n).saturating_sub(MAX_PENDING);
-                        if overflow > 0 {
-                            let drop_n = overflow.min(g.len());
-                            g.drain(..drop_n);
-                            dropped_bytes += drop_n as u64;
+                        if g.len() + n > MAX_PENDING {
+                            // Discard the whole backlog rather than slicing
+                            // through escape sequences. Emit a hard reset so
+                            // xterm doesn't carry stale SGR/cursor state.
+                            dropped_bytes += g.len() as u64;
+                            g.clear();
+                            g.extend_from_slice(OVERFLOW_NOTICE);
                         }
                         g.extend_from_slice(&buf[..n]);
                     }

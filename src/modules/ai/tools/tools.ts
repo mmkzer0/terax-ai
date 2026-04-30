@@ -59,7 +59,7 @@ export function buildTools(ctx: ToolContext) {
   return {
     read_file: tool({
       description:
-        "Read a UTF-8 text file. Returns content for text files; refuses binary, oversized, or sensitive files (.env, keys, credentials).",
+        "Read a UTF-8 text file. Returns content for text files; refuses binary, oversized, or sensitive files (.env, keys, credentials). Files larger than 200KB are truncated — re-call with a different path or use run_command for `sed -n` slicing if you need the rest.",
       inputSchema: z.object({
         path: z
           .string()
@@ -71,8 +71,21 @@ export function buildTools(ctx: ToolContext) {
         if (!safety.ok) return { error: safety.reason, path: abs };
         try {
           const r = await native.readFile(abs);
-          if (r.kind === "text")
+          if (r.kind === "text") {
+            // Cap content shipped to the model independently of the native
+            // 10MB read limit — a 1MB log = ~250k tokens silently injected.
+            const AI_READ_CAP = 200 * 1024;
+            if (r.content.length > AI_READ_CAP) {
+              return {
+                path: abs,
+                content: r.content.slice(0, AI_READ_CAP),
+                size: r.size,
+                truncated: true,
+                truncatedAt: AI_READ_CAP,
+              };
+            }
             return { path: abs, content: r.content, size: r.size };
+          }
           if (r.kind === "binary")
             return { error: "binary file refused", path: abs, size: r.size };
           return {

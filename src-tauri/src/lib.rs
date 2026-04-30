@@ -1,7 +1,7 @@
 mod modules;
 
 use modules::{fs, pty, shell};
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 #[tauri::command]
 async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Result<(), String> {
@@ -12,11 +12,10 @@ async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Res
 
     if let Some(window) = app.get_webview_window("settings") {
         let _ = window.set_focus();
-        if tab.is_some() {
-            let _ = window.eval(&format!(
-                "window.dispatchEvent(new CustomEvent('terax:settings-tab', {{ detail: {:?} }}));",
-                tab.unwrap_or_default()
-            ));
+        if let Some(t) = tab.as_deref().filter(|s| !s.is_empty()) {
+            // emit() serializes via JSON — no string-escape footgun, unlike
+            // eval() with format!(). Frontend listens via Tauri event API.
+            let _ = window.emit("terax:settings-tab", t);
         }
         return Ok(());
     }

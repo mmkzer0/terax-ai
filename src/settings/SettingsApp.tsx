@@ -8,6 +8,7 @@ import {
   UserMultiple02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect, useState } from "react";
 import { AboutSection } from "./sections/AboutSection";
 import { AgentsSection } from "./sections/AgentsSection";
@@ -43,8 +44,7 @@ export function SettingsApp() {
   }, [init]);
 
   useEffect(() => {
-    const onTab = (e: Event) => {
-      const detail = (e as CustomEvent<string>).detail;
+    const apply = (detail: string) => {
       if (detail === "ai" || detail === "connections") {
         setActive("models");
         return;
@@ -53,8 +53,13 @@ export function SettingsApp() {
         setActive(detail as SettingsTab);
       }
     };
-    window.addEventListener("terax:settings-tab", onTab);
-    return () => window.removeEventListener("terax:settings-tab", onTab);
+    const unlistenPromise = getCurrentWebviewWindow().listen<string>(
+      "terax:settings-tab",
+      (e) => apply(e.payload),
+    );
+    return () => {
+      void unlistenPromise.then((un) => un());
+    };
   }, []);
 
   return (

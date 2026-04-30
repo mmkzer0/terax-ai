@@ -11,7 +11,6 @@ import { openPty, type PtySession } from "./pty-bridge";
 
 const FONT_FAMILY = '"JetBrains Mono", SFMono-Regular, Menlo, monospace';
 const FONT_SIZE = 14;
-const RESIZE_DEBOUNCE_MS = 7.5;
 
 type Options = {
   container: React.RefObject<HTMLDivElement | null>;
@@ -28,8 +27,6 @@ type Options = {
 const LOCAL_URL_RE =
   /\bhttps?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d{1,5})?(?:\/[^\s\x1b]*)?/g;
 
-const URL_DECODER = new TextDecoder("utf-8", { fatal: false });
-
 export function useTerminalSession({
   container,
   visible,
@@ -41,9 +38,15 @@ export function useTerminalSession({
 }: Options) {
   const detectedRef = useRef<string | null>(null);
   const onDetectedRef = useRef(onDetectedLocalUrl);
+  const onCwdRef = useRef(onCwd);
+  const onExitRef = useRef(onExit);
+  const onSearchReadyRef = useRef(onSearchReady);
   useEffect(() => {
     onDetectedRef.current = onDetectedLocalUrl;
-  }, [onDetectedLocalUrl]);
+    onCwdRef.current = onCwd;
+    onExitRef.current = onExit;
+    onSearchReadyRef.current = onSearchReady;
+  }, [onDetectedLocalUrl, onCwd, onExit, onSearchReady]);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const ptyRef = useRef<PtySession | null>(null);
@@ -64,7 +67,10 @@ export function useTerminalSession({
         cursorBlink: true,
         cursorStyle: "bar",
         cursorInactiveStyle: "outline",
-        scrollback: 10_000,
+        // 5k lines × 80 cols × ~16 B per cell ≈ 6 MB per tab. 10k doubled
+        // that for output almost no one scrolls back to. Keep this knob in
+        // mind if/when we add a "scrollback" preference.
+        scrollback: 5_000,
         allowProposedApi: true,
       });
       termRef.current = term;
@@ -92,10 +98,14 @@ export function useTerminalSession({
 
       const prompt = registerPromptTracker(term);
       cleanups.push(
-        registerCwdHandler(term, (cwd) => onCwd?.(cwd)),
+        registerCwdHandler(term, (cwd) => onCwdRef.current?.(cwd)),
         prompt.dispose,
       );
-      onSearchReady?.(search);
+      onSearchReadyRef.current?.(search);
+
+      // Per-session decoder so interleaved chunks across tabs don't splice
+      // a multi-byte UTF-8 codepoint between unrelated streams.
+      const urlDecoder = new TextDecoder("utf-8", { fatal: false });
 
       const pty = await openPty(
         term.cols,
@@ -107,7 +117,7 @@ export function useTerminalSession({
             // (':' '/' '/') skips decode+regex on the overwhelming majority
             // of chunks (ordinary terminal output, log tails, test runs).
             if (onDetectedRef.current && containsSchemeSeparator(bytes)) {
-              const text = URL_DECODER.decode(bytes, { stream: true });
+              const text = urlDecoder.decode(bytes, { stream: true });
               const matches = text.match(LOCAL_URL_RE);
               if (matches && matches.length > 0) {
                 const url = stripTrailingPunct(matches[matches.length - 1]);
@@ -121,7 +131,7 @@ export function useTerminalSession({
           onExit: (code) => {
             term.write(`\r\n\x1b[2m[process exited: ${code}]\x1b[0m\r\n`);
             term.options.disableStdin = true;
-            onExit?.(code);
+            onExitRef.current?.(code);
           },
         },
         initialCwd,
@@ -134,26 +144,54 @@ export function useTerminalSession({
 
       term.onData((data) => pty.write(data));
 
-      let lastCols = term.cols;
-      let lastRows = term.rows;
-      let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+      // Two-stage debounce:
+      //  - FIT runs frequently (~one frame) so xterm visually keeps up with
+      //    the window during drag. Local, no IPC.
+      //  - PTY_RESIZE only fires on the trailing edge of the drag, because
+      //    SIGWINCH is what causes shells / fancy prompts (powerlevel10k,
+      //    starship) to redraw mid-resize, which the user perceives as
+      //    blinking. The shell only cares about the FINAL size.
+      const FIT_DEBOUNCE_MS = 8;
+      const PTY_RESIZE_DEBOUNCE_MS = 256;
+      let lastSentCols = term.cols;
+      let lastSentRows = term.rows;
+      let lastW = container.current.clientWidth;
+      let lastH = container.current.clientHeight;
+      let fitTimer: ReturnType<typeof setTimeout> | null = null;
+      let ptyTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const el = container.current;
+      const flushPtyResize = () => {
+        ptyTimer = null;
+        if (disposed) return;
+        if (term.cols === lastSentCols && term.rows === lastSentRows) return;
+        lastSentCols = term.cols;
+        lastSentRows = term.rows;
+        pty.resize(term.cols, term.rows);
+      };
 
       const observer = new ResizeObserver(() => {
-        if (resizeTimer) clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
-          resizeTimer = null;
+        if (fitTimer) clearTimeout(fitTimer);
+        fitTimer = setTimeout(() => {
+          fitTimer = null;
           if (disposed) return;
+          const w = el.clientWidth;
+          const h = el.clientHeight;
+          if (w === lastW && h === lastH) return;
+          lastW = w;
+          lastH = h;
           fit.fit();
-          if (term.cols === lastCols && term.rows === lastRows) return;
-          lastCols = term.cols;
-          lastRows = term.rows;
-          pty.resize(term.cols, term.rows);
-        }, RESIZE_DEBOUNCE_MS);
+          // Schedule (or re-schedule) a single trailing pty.resize. The
+          // shell sees one SIGWINCH after the drag settles, not 60+/s.
+          if (ptyTimer) clearTimeout(ptyTimer);
+          ptyTimer = setTimeout(flushPtyResize, PTY_RESIZE_DEBOUNCE_MS);
+        }, FIT_DEBOUNCE_MS);
       });
-      observer.observe(container.current);
+      observer.observe(el);
       cleanups.push(() => {
         observer.disconnect();
-        if (resizeTimer) clearTimeout(resizeTimer);
+        if (fitTimer) clearTimeout(fitTimer);
+        if (ptyTimer) clearTimeout(ptyTimer);
       });
 
       if (visible) term.focus();
