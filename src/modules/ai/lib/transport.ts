@@ -3,7 +3,36 @@ import { DirectChatTransport } from "ai";
 import { TERMINAL_BUFFER_LINES, type ModelId } from "../config";
 import { createTeraxAgent } from "./agent";
 import type { ProviderKeys } from "./keyring";
+import { native } from "./native";
 import type { ToolContext } from "../tools/tools";
+
+const TERAX_MD_MAX_BYTES = 32 * 1024;
+type MemoryCacheEntry = { content: string | null; mtime: number };
+const projectMemoryCache = new Map<string, MemoryCacheEntry>();
+
+async function readTeraxMd(workspaceRoot: string | null): Promise<string | null> {
+  if (!workspaceRoot) return null;
+  const path = `${workspaceRoot.replace(/\/$/, "")}/TERAX.md`;
+  const cached = projectMemoryCache.get(workspaceRoot);
+  // Cache for 30s — cheap re-read after that to pick up edits.
+  if (cached && Date.now() - cached.mtime < 30_000) return cached.content;
+  try {
+    const r = await native.readFile(path);
+    if (r.kind !== "text") {
+      projectMemoryCache.set(workspaceRoot, { content: null, mtime: Date.now() });
+      return null;
+    }
+    const content =
+      r.content.length > TERAX_MD_MAX_BYTES
+        ? r.content.slice(0, TERAX_MD_MAX_BYTES)
+        : r.content;
+    projectMemoryCache.set(workspaceRoot, { content, mtime: Date.now() });
+    return content;
+  } catch {
+    projectMemoryCache.set(workspaceRoot, { content: null, mtime: Date.now() });
+    return null;
+  }
+}
 
 type LiveSnapshot = {
   cwd: string | null;
@@ -23,6 +52,7 @@ type Deps = {
   getLive: () => LiveSnapshot;
   getLmstudioBaseURL?: () => string | undefined;
   onStep?: (step: string | null) => void;
+  getPlanMode?: () => boolean;
 };
 
 export function createContextAwareTransport(deps: Deps) {
@@ -31,6 +61,8 @@ export function createContextAwareTransport(deps: Deps) {
       messages: UIMessage[];
       [k: string]: unknown;
     }) {
+      const live = deps.getLive();
+      const projectMemory = await readTeraxMd(live.workspaceRoot);
       const agent = createTeraxAgent({
         keys: deps.getKeys(),
         modelId: deps.getModelId(),
@@ -39,6 +71,8 @@ export function createContextAwareTransport(deps: Deps) {
         toolContext: deps.toolContext,
         onStep: deps.onStep,
         lmstudioBaseURL: deps.getLmstudioBaseURL?.(),
+        planMode: deps.getPlanMode?.(),
+        projectMemory,
       });
       const base = new DirectChatTransport({ agent });
       const augmented = injectContext(options.messages, deps.getLive());
@@ -48,6 +82,8 @@ export function createContextAwareTransport(deps: Deps) {
       } as Parameters<typeof base.sendMessages>[0]);
     },
     async reconnectToStream(options: unknown) {
+      const live = deps.getLive();
+      const projectMemory = await readTeraxMd(live.workspaceRoot);
       const agent = createTeraxAgent({
         keys: deps.getKeys(),
         modelId: deps.getModelId(),
@@ -56,6 +92,8 @@ export function createContextAwareTransport(deps: Deps) {
         toolContext: deps.toolContext,
         onStep: deps.onStep,
         lmstudioBaseURL: deps.getLmstudioBaseURL?.(),
+        planMode: deps.getPlanMode?.(),
+        projectMemory,
       });
       const base = new DirectChatTransport({ agent });
       type ReconnectArg = Parameters<typeof base.reconnectToStream>[0];

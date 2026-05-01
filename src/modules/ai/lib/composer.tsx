@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useWhisperRecording } from "../hooks/useWhisperRecording";
 import { expandSnippetTokens, type Snippet } from "../lib/snippets";
+import { tryRunSlashCommand } from "./slashCommands";
 import { getOrCreateChat, useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
 
@@ -195,6 +196,21 @@ export function AiComposerProvider({ children }: ProviderProps) {
     const trimmed = value.trim();
     if (!trimmed && files.length === 0 && pickedSnippets.length === 0) return;
 
+    // Slash-command interception. `/plan` toggles plan mode; `/init` rewrites
+    // the prompt to the TERAX.md scan template before sending.
+    let effectiveText = trimmed;
+    if (trimmed.startsWith("/")) {
+      const outcome = tryRunSlashCommand(trimmed);
+      if (outcome.kind === "handled") {
+        setValue("");
+        if (outcome.toast) console.info(outcome.toast);
+        return;
+      }
+      if (outcome.kind === "send-prompt") {
+        effectiveText = outcome.prompt;
+      }
+    }
+
     const parts: MessagePart[] = [];
     const fileBlocks = files
       .filter((f) => f.kind === "text")
@@ -209,7 +225,7 @@ export function AiComposerProvider({ children }: ProviderProps) {
           `<selection source="${f.source ?? "terminal"}">\n${f.text ?? ""}\n</selection>`,
       );
     const { body: bodyAfterTokens, blocks: snippetBlocks } = expandSnippetTokens(
-      trimmed,
+      effectiveText,
       useSnippetsStore.getState().snippets,
     );
     const seenHandles = new Set<string>();

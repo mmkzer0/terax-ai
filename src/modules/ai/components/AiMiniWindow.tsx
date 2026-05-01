@@ -24,8 +24,11 @@ import { useEffect, useMemo } from "react";
 import type { SessionMeta } from "../lib/sessions";
 import { useAgentsStore } from "../store/agentsStore";
 import { getOrCreateChat, useChatStore } from "../store/chatStore";
+import { usePlanStore } from "../store/planStore";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { AiChatView } from "./AiChat";
+import { PlanDiffReview } from "./PlanDiffReview";
+import { TodoStrip } from "./TodoStrip";
 
 const SUGGESTIONS = [
   {
@@ -96,6 +99,7 @@ export function AiMiniWindow() {
       ) : (
         <EmptyShell onClose={closeMini} onExpand={expandToPanel} />
       )}
+      <PlanDiffReview />
     </motion.div>
   );
 }
@@ -126,6 +130,9 @@ function Body({
         onExpand={onExpand}
       />
 
+      <PlanModeStrip />
+      <TodoStrip sessionId={sessionId} />
+
       <div className="flex min-h-0 flex-1 flex-col">
         {helpers.messages.length === 0 ? (
           <EmptyState onPick={focusInput} />
@@ -143,6 +150,27 @@ function Body({
         )}
       </div>
     </>
+  );
+}
+
+function PlanModeStrip() {
+  const active = usePlanStore((s) => s.active);
+  const queueLen = usePlanStore((s) => s.queue.length);
+  const disable = usePlanStore((s) => s.disable);
+  if (!active) return null;
+  return (
+    <div className="flex shrink-0 items-center justify-between border-b border-amber-500/30 bg-amber-500/10 px-2.5 py-1">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
+        Plan mode {queueLen > 0 ? `· ${queueLen} queued` : "· no edits queued"}
+      </span>
+      <button
+        type="button"
+        onClick={() => disable()}
+        className="rounded px-1.5 py-0.5 text-[10px] text-amber-700 hover:bg-amber-500/20 dark:text-amber-400"
+      >
+        exit
+      </button>
+    </div>
   );
 }
 

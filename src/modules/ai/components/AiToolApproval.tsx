@@ -15,8 +15,11 @@ type Props = {
 
 const TOOL_LABELS: Record<string, string> = {
   write_file: "Write file",
+  edit: "Edit file",
+  multi_edit: "Edit file (batch)",
   create_directory: "Create directory",
-  run_command: "Run shell command",
+  bash_run: "Run shell command",
+  bash_background: "Spawn background process",
 };
 
 export function AiToolApproval({ part, toolName, onRespond }: Props) {
@@ -62,7 +65,7 @@ function PreviewBlock({
   toolName: string;
   input: Record<string, unknown>;
 }) {
-  if (toolName === "run_command") {
+  if (toolName === "bash_run" || toolName === "bash_background") {
     const cwd = typeof input.cwd === "string" ? input.cwd : null;
     return (
       <div className="space-y-1.5">
@@ -92,6 +95,36 @@ function PreviewBlock({
         <pre className="max-h-40 overflow-auto rounded bg-muted/60 p-2 font-mono text-xs">
           {preview}
         </pre>
+      </div>
+    );
+  }
+  if (toolName === "edit") {
+    const oldStr = typeof input.old_string === "string" ? input.old_string : "";
+    const newStr = typeof input.new_string === "string" ? input.new_string : "";
+    const ellipsis = (s: string) =>
+      s.length > 300 ? `${s.slice(0, 300)}\n…(${s.length - 300} more chars)` : s;
+    return (
+      <div className="space-y-1.5">
+        <div className="font-mono text-[11px] text-muted-foreground">
+          {String(input.path ?? "")}
+          {input.replace_all ? "  (replace all)" : ""}
+        </div>
+        <pre className="max-h-32 overflow-auto rounded bg-red-500/5 border border-red-500/20 p-2 font-mono text-xs">
+          - {ellipsis(oldStr)}
+        </pre>
+        <pre className="max-h-32 overflow-auto rounded bg-green-500/5 border border-green-500/20 p-2 font-mono text-xs">
+          + {ellipsis(newStr)}
+        </pre>
+      </div>
+    );
+  }
+  if (toolName === "multi_edit") {
+    const edits = Array.isArray(input.edits) ? input.edits : [];
+    return (
+      <div className="space-y-1.5">
+        <div className="font-mono text-[11px] text-muted-foreground">
+          {String(input.path ?? "")} — {edits.length} edit{edits.length === 1 ? "" : "s"}
+        </div>
       </div>
     );
   }

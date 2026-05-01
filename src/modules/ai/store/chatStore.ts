@@ -13,6 +13,8 @@ import {
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { BUILTIN_AGENTS } from "../lib/agents";
 import { useAgentsStore } from "./agentsStore";
+import { usePlanStore } from "./planStore";
+import { useTodosStore } from "./todoStore";
 import { EMPTY_PROVIDER_KEYS, type ProviderKeys } from "../lib/keyring";
 import {
   deleteSessionData,
@@ -145,13 +147,20 @@ const chats = new Map<string, Chat<UIMessage>>();
 const seedMessages = new Map<string, UIMessage[]>();
 
 function makeChat(sessionId: string): Chat<UIMessage> {
+  // Per-session read cache: paths the model has called `read_file` on.
+  // `edit`/`multi_edit` enforce read-before-edit by checking membership.
+  const readCache = new Set<string>();
   const toolContext: ToolContext = {
     getCwd: () => useChatStore.getState().live.getCwd(),
+    getWorkspaceRoot: () =>
+      useChatStore.getState().live.getWorkspaceRoot(),
     getTerminalContext: () =>
       useChatStore.getState().live.getTerminalContext(),
     injectIntoActivePty: (text) =>
       useChatStore.getState().live.injectIntoActivePty(text),
     openPreview: (url) => useChatStore.getState().live.openPreview(url),
+    readCache,
+    getSessionId: () => sessionId,
   };
 
   const transport = createContextAwareTransport({
@@ -175,6 +184,7 @@ function makeChat(sessionId: string): Chat<UIMessage> {
         activeFile: live.getActiveFile(),
       };
     },
+    getPlanMode: () => usePlanStore.getState().active,
     onStep: (step) => {
       useChatStore.getState().patchAgentMeta({ step });
     },
@@ -329,6 +339,7 @@ export const useChatStore = create<StoreState>((set, get) => ({
     chats.delete(id);
     seedMessages.delete(id);
     void deleteSessionData(id);
+    void useTodosStore.getState().clearSession(id);
 
     if (remaining.length === 0) {
       const fresh: SessionMeta = {

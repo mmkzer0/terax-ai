@@ -48,6 +48,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_keyring::init())
         .manage(pty::PtyState::default())
+        .manage(shell::ShellState::default())
         .invoke_handler(tauri::generate_handler![
             pty::pty_open,
             pty::pty_write,
@@ -63,7 +64,16 @@ pub fn run() {
             fs::mutate::fs_rename,
             fs::mutate::fs_delete,
             fs::search::fs_search,
+            fs::grep::fs_grep,
+            fs::grep::fs_glob,
             shell::shell_run_command,
+            shell::shell_session_open,
+            shell::shell_session_run,
+            shell::shell_session_close,
+            shell::shell_bg_spawn,
+            shell::shell_bg_logs,
+            shell::shell_bg_kill,
+            shell::shell_bg_list,
             open_settings_window,
         ])
         .run(tauri::generate_context!())

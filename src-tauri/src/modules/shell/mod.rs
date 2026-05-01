@@ -1,11 +1,20 @@
+pub mod background;
+pub mod ringbuffer;
+pub mod session;
+
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
+
+use background::{BackgroundLogResponse, BackgroundProc, BackgroundProcInfo};
+use session::{SessionRunOutput, ShellSession};
 
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 const MAX_TIMEOUT_SECS: u64 = 300;
@@ -60,6 +69,14 @@ pub async fn shell_run_command(
     });
 
     rx.recv().map_err(|e| e.to_string())?
+}
+
+pub(crate) fn run_blocking_inner(
+    command: String,
+    cwd: Option<PathBuf>,
+    dur: Duration,
+) -> Result<CommandOutput, String> {
+    run_blocking(command, cwd, dur)
 }
 
 fn run_blocking(
@@ -118,6 +135,131 @@ fn run_blocking(
         timed_out,
         truncated: stdout_truncated || stderr_truncated,
     })
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Persistent agent shell state + background process state.
+// ──────────────────────────────────────────────────────────────────────────
+
+pub struct ShellState {
+    sessions: RwLock<HashMap<u32, Arc<ShellSession>>>,
+    bg: RwLock<HashMap<u32, Arc<BackgroundProc>>>,
+    next_session_id: AtomicU32,
+    next_bg_id: AtomicU32,
+}
+
+impl Default for ShellState {
+    fn default() -> Self {
+        Self {
+            sessions: RwLock::new(HashMap::new()),
+            bg: RwLock::new(HashMap::new()),
+            next_session_id: AtomicU32::new(1),
+            next_bg_id: AtomicU32::new(1),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn shell_session_open(
+    state: tauri::State<ShellState>,
+    cwd: Option<String>,
+) -> Result<u32, String> {
+    let initial = match cwd.as_deref().filter(|s| !s.is_empty()) {
+        Some(c) => {
+            let p = PathBuf::from(c);
+            if !p.is_dir() {
+                return Err(format!("cwd is not a directory: {c}"));
+            }
+            p
+        }
+        None => std::env::var("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/")),
+    };
+    let session = Arc::new(ShellSession::new(initial));
+    let id = state.next_session_id.fetch_add(1, Ordering::Relaxed);
+    state.sessions.write().unwrap().insert(id, session);
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn shell_session_run(
+    state: tauri::State<'_, ShellState>,
+    id: u32,
+    command: String,
+    timeout_secs: Option<u64>,
+) -> Result<SessionRunOutput, String> {
+    let session = state
+        .sessions
+        .read()
+        .unwrap()
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| "no shell session".to_string())?;
+    let dur = Duration::from_secs(
+        timeout_secs
+            .unwrap_or(DEFAULT_TIMEOUT_SECS)
+            .clamp(1, MAX_TIMEOUT_SECS),
+    );
+    // Run on a worker so we don't block the async runtime.
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = tx.send(session.run(command, dur));
+    });
+    rx.recv().map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn shell_session_close(state: tauri::State<ShellState>, id: u32) -> Result<(), String> {
+    state.sessions.write().unwrap().remove(&id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn shell_bg_spawn(
+    state: tauri::State<ShellState>,
+    command: String,
+    cwd: Option<String>,
+) -> Result<u32, String> {
+    let proc = background::spawn(command, cwd)?;
+    let id = state.next_bg_id.fetch_add(1, Ordering::Relaxed);
+    state.bg.write().unwrap().insert(id, proc);
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn shell_bg_logs(
+    state: tauri::State<ShellState>,
+    handle: u32,
+    since_offset: Option<u64>,
+) -> Result<BackgroundLogResponse, String> {
+    let proc = state
+        .bg
+        .read()
+        .unwrap()
+        .get(&handle)
+        .cloned()
+        .ok_or_else(|| "no background handle".to_string())?;
+    Ok(proc.read_logs(since_offset.unwrap_or(0)))
+}
+
+#[tauri::command]
+pub fn shell_bg_kill(state: tauri::State<ShellState>, handle: u32) -> Result<(), String> {
+    if let Some(proc) = state.bg.read().unwrap().get(&handle).cloned() {
+        proc.kill();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn shell_bg_list(state: tauri::State<ShellState>) -> Result<Vec<BackgroundProcInfo>, String> {
+    let map = state.bg.read().unwrap();
+    let mut out = Vec::with_capacity(map.len());
+    for (id, p) in map.iter() {
+        out.push(p.info(*id));
+    }
+    out.sort_by_key(|i| i.handle);
+    Ok(out)
 }
 
 fn drain<R: Read>(reader: &mut R) -> (Vec<u8>, bool) {
