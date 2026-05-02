@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { useUpdater } from "@/modules/updater";
 import { GithubIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { getName, getVersion } from "@tauri-apps/api/app";
@@ -22,6 +23,16 @@ export function AboutSection() {
   const [version, setVersion] = useState("");
   const [name, setName] = useState("Terax");
   const [build, setBuild] = useState("");
+  const { status, check } = useUpdater();
+  const checking = status.kind === "checking";
+  const checkLabel =
+    status.kind === "uptodate"
+      ? "You're up to date"
+      : status.kind === "error"
+        ? "Check failed — retry"
+        : checking
+          ? "Checking…"
+          : "Check for updates";
 
   useEffect(() => {
     void getVersion().then(setVersion);
@@ -81,6 +92,13 @@ export function AboutSection() {
       </dl>
 
       <div className="flex gap-2">
+        <Button
+          size="sm"
+          onClick={() => void check({ manual: true })}
+          disabled={checking}
+        >
+          {checkLabel}
+        </Button>
         <Button
           variant="outline"
           size="sm"

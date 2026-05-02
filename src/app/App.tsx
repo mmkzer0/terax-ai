@@ -43,6 +43,7 @@ import { StatusBar } from "@/modules/statusbar";
 import { useTabs, useWorkspaceCwd } from "@/modules/tabs";
 import { TerminalStack, type TerminalPaneHandle } from "@/modules/terminal";
 import { ThemeProvider } from "@/modules/theme";
+import { UpdaterDialog } from "@/modules/updater";
 import { homeDir } from "@tauri-apps/api/path";
 import type { SearchAddon } from "@xterm/addon-search";
 import { AnimatePresence, motion } from "motion/react";
@@ -749,6 +750,8 @@ export default function App() {
             rootPath={explorerRoot ?? home}
             onCreated={(path) => openFileTab(path)}
           />
+
+          <UpdaterDialog />
         </div>
       </TooltipProvider>
     </ThemeProvider>

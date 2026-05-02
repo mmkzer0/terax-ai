@@ -174,10 +174,7 @@ pub fn fs_glob(
     if !root_path.is_dir() {
         return Err(format!("not a directory: {root}"));
     }
-    let cap = max_results
-        .unwrap_or(500)
-        .min(HARD_MAX_RESULTS)
-        .max(1);
+    let cap = max_results.unwrap_or(500).min(HARD_MAX_RESULTS).max(1);
 
     let glob = Glob::new(&pattern).map_err(|e| format!("bad glob: {e}"))?;
     let mut gb = GlobSetBuilder::new();
