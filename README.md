@@ -1,6 +1,5 @@
 <div align="center">
   <img src="public/logo.png" width="144" height="144" alt="Terax" />
-  <br/>
   <h1>Terax</h1>
 
   <p><strong>Open-source lightweight cross-platform AI-native terminal (ADE)</strong></p>

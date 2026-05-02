@@ -6,18 +6,57 @@ import { defineConfig } from "vite";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(async ({ mode }) => ({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  esbuild: {
+    drop:
+      mode === "production"
+        ? (["console", "debugger"] as ("console" | "debugger")[])
+        : ([] as ("console" | "debugger")[]),
+  },
   build: {
+    target: "esnext",
+    chunkSizeWarningLimit: 1500,
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, "index.html"),
         settings: path.resolve(__dirname, "settings.html"),
+      },
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return;
+
+          // Each AI provider SDK in its own chunk so unused providers
+          // don't bloat the initial load (lazy-imported in agent.ts).
+          if (id.includes("@ai-sdk/anthropic")) return "ai-anthropic";
+          if (id.includes("@ai-sdk/google")) return "ai-google";
+          if (id.includes("@ai-sdk/openai-compatible")) return "ai-openai-compat";
+          if (id.includes("@ai-sdk/openai")) return "ai-openai";
+          if (id.includes("@ai-sdk/cerebras")) return "ai-cerebras";
+          if (id.includes("@ai-sdk/groq")) return "ai-groq";
+          if (id.includes("@ai-sdk/xai")) return "ai-xai";
+          if (id.includes("@ai-sdk/")) return "ai-sdk-shared";
+
+          if (id.includes("/xterm/") || id.includes("@xterm/")) return "xterm";
+          if (id.includes("@codemirror/") || id.includes("@uiw/codemirror") || id.includes("@replit/codemirror")) return "codemirror";
+          if (id.includes("/streamdown/") || id.includes("@streamdown/")) return "streamdown";
+          // Only the shiki core/engine in one chunk. Grammars and themes
+          // stay split (one chunk per file) — they load lazily on first use.
+          if (
+            id.includes("/shiki/dist/core") ||
+            id.includes("/shiki/dist/engine") ||
+            id.includes("/shiki/dist/index")
+          )
+            return "shiki";
+          if (id.includes("/motion/") || id.includes("framer-motion")) return "motion";
+          if (id.includes("/react-dom/") || id.includes("/react/") || id.includes("/scheduler/")) return "react";
+          if (id.includes("@radix-ui/") || id.includes("/radix-ui/")) return "radix";
+        },
       },
     },
   },

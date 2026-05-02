@@ -22,13 +22,56 @@ import {
   useRef,
   useState,
 } from "react";
-import type {
-  BundledLanguage,
-  BundledTheme,
-  HighlighterGeneric,
-  ThemedToken,
-} from "shiki";
-import { createHighlighter } from "shiki";
+import type { BundledLanguage, ThemedToken } from "shiki";
+import type { HighlighterCore } from "shiki/core";
+
+// Explicit grammar map. Adding a language here is a deliberate decision —
+// every entry ships in the bundle, so resist the urge to add long-tail langs.
+// Aliases (e.g. "ts" → typescript, "py" → python) are auto-registered by
+// each grammar; a loader is keyed by canonical name only.
+type GrammarLoader = () => Promise<unknown>;
+const GRAMMARS: Record<string, GrammarLoader> = {
+  typescript: () => import("shiki/langs/typescript.mjs"),
+  tsx: () => import("shiki/langs/tsx.mjs"),
+  javascript: () => import("shiki/langs/javascript.mjs"),
+  jsx: () => import("shiki/langs/jsx.mjs"),
+  json: () => import("shiki/langs/json.mjs"),
+  markdown: () => import("shiki/langs/markdown.mjs"),
+  bash: () => import("shiki/langs/bash.mjs"),
+  rust: () => import("shiki/langs/rust.mjs"),
+  python: () => import("shiki/langs/python.mjs"),
+  css: () => import("shiki/langs/css.mjs"),
+  html: () => import("shiki/langs/html.mjs"),
+  yaml: () => import("shiki/langs/yaml.mjs"),
+  toml: () => import("shiki/langs/toml.mjs"),
+  go: () => import("shiki/langs/go.mjs"),
+  java: () => import("shiki/langs/java.mjs"),
+  c: () => import("shiki/langs/c.mjs"),
+  cpp: () => import("shiki/langs/cpp.mjs"),
+  ruby: () => import("shiki/langs/ruby.mjs"),
+  swift: () => import("shiki/langs/swift.mjs"),
+  kotlin: () => import("shiki/langs/kotlin.mjs"),
+  sql: () => import("shiki/langs/sql.mjs"),
+  diff: () => import("shiki/langs/diff.mjs"),
+};
+
+// Aliases → canonical grammar name. Required because the `language` we
+// receive may be a short alias the highlighter doesn't yet have loaded.
+const ALIASES: Record<string, string> = {
+  ts: "typescript",
+  js: "javascript",
+  md: "markdown",
+  sh: "bash",
+  zsh: "bash",
+  shell: "bash",
+  rs: "rust",
+  py: "python",
+  yml: "yaml",
+};
+
+function canonical(lang: string): string {
+  return ALIASES[lang] ?? lang;
+}
 
 // Shiki uses bitflags for font styles: 1=italic, 2=bold, 4=underline
 // oxlint-disable-next-line eslint(no-bitwise)
@@ -130,16 +173,14 @@ const CodeBlockContext = createContext<CodeBlockContextType>({
   code: "",
 });
 
-// Highlighter cache (singleton per language)
-const highlighterCache = new Map<
-  string,
-  Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
->();
+// Singleton highlighter, lazily initialized on first use. Uses shiki/core
+// with the JS regex engine (no Oniguruma WASM) and only the grammars we
+// explicitly opt into above.
+let highlighterPromise: Promise<HighlighterCore> | null = null;
+const loadedLangs = new Set<string>();
+const loadingLangs = new Map<string, Promise<void>>();
 
-// Token cache
 const tokensCache = new Map<string, TokenizedCode>();
-
-// Subscribers for async token updates
 const subscribers = new Map<string, Set<(result: TokenizedCode) => void>>();
 
 const getTokensCacheKey = (code: string, language: BundledLanguage) => {
@@ -148,22 +189,44 @@ const getTokensCacheKey = (code: string, language: BundledLanguage) => {
   return `${language}:${code.length}:${start}:${end}`;
 };
 
-const getHighlighter = (
-  language: BundledLanguage
-): Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> => {
-  const cached = highlighterCache.get(language);
-  if (cached) {
-    return cached;
+async function getHighlighter(): Promise<HighlighterCore> {
+  if (!highlighterPromise) {
+    highlighterPromise = (async () => {
+      const [{ createHighlighterCore }, { createJavaScriptRegexEngine }] =
+        await Promise.all([
+          import("shiki/core"),
+          import("shiki/engine/javascript"),
+        ]);
+      return createHighlighterCore({
+        themes: [
+          import("shiki/themes/github-light.mjs"),
+          import("shiki/themes/github-dark.mjs"),
+        ],
+        langs: [],
+        engine: createJavaScriptRegexEngine(),
+      });
+    })();
   }
-
-  const highlighterPromise = createHighlighter({
-    langs: [language],
-    themes: ["github-light", "github-dark"],
-  });
-
-  highlighterCache.set(language, highlighterPromise);
   return highlighterPromise;
-};
+}
+
+async function ensureLanguage(language: string): Promise<string> {
+  const name = canonical(language);
+  if (!GRAMMARS[name]) return "text";
+  if (loadedLangs.has(name)) return name;
+  let pending = loadingLangs.get(name);
+  if (!pending) {
+    pending = (async () => {
+      const hl = await getHighlighter();
+      const mod = await GRAMMARS[name]!();
+      await hl.loadLanguage(mod as Parameters<typeof hl.loadLanguage>[0]);
+      loadedLangs.add(name);
+    })();
+    loadingLangs.set(name, pending);
+  }
+  await pending;
+  return name;
+}
 
 // Create raw tokens for immediate display while highlighting loads
 const createRawTokens = (code: string): TokenizedCode => ({
@@ -205,20 +268,16 @@ export const highlightCode = (
   }
 
   // Start highlighting in background - fire-and-forget async pattern
-  getHighlighter(language)
+  (async () => {
+    const langToUse = await ensureLanguage(language);
+    const highlighter = await getHighlighter();
+    return highlighter.codeToTokens(code, {
+      lang: langToUse,
+      themes: { dark: "github-dark", light: "github-light" },
+    });
+  })()
     // oxlint-disable-next-line eslint-plugin-promise(prefer-await-to-then)
-    .then((highlighter) => {
-      const availableLangs = highlighter.getLoadedLanguages();
-      const langToUse = availableLangs.includes(language) ? language : "text";
-
-      const result = highlighter.codeToTokens(code, {
-        lang: langToUse,
-        themes: {
-          dark: "github-dark",
-          light: "github-light",
-        },
-      });
-
+    .then((result) => {
       const tokenized: TokenizedCode = {
         bg: result.bg ?? "transparent",
         fg: result.fg ?? "inherit",

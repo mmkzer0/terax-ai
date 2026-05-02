@@ -63,7 +63,7 @@ export function createContextAwareTransport(deps: Deps) {
     }) {
       const live = deps.getLive();
       const projectMemory = await readTeraxMd(live.workspaceRoot);
-      const agent = createTeraxAgent({
+      const agent = await createTeraxAgent({
         keys: deps.getKeys(),
         modelId: deps.getModelId(),
         customInstructions: deps.getCustomInstructions(),
@@ -84,7 +84,7 @@ export function createContextAwareTransport(deps: Deps) {
     async reconnectToStream(options: unknown) {
       const live = deps.getLive();
       const projectMemory = await readTeraxMd(live.workspaceRoot);
-      const agent = createTeraxAgent({
+      const agent = await createTeraxAgent({
         keys: deps.getKeys(),
         modelId: deps.getModelId(),
         customInstructions: deps.getCustomInstructions(),

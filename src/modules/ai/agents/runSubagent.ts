@@ -46,7 +46,7 @@ export async function runSubagent({
     if (t in readOnly) filtered[t] = readOnly[t];
   }
 
-  const model = buildLanguageModel(getModel(modelId).provider, keys, getModel(modelId).id, {
+  const model = await buildLanguageModel(getModel(modelId).provider, keys, getModel(modelId).id, {
     lmstudioBaseURL,
   });
 

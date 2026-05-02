@@ -1,8 +1,8 @@
 import { PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { Snippet } from "../lib/snippets";
 import type { SlashCommandMeta } from "../lib/slashCommands";
+import type { Snippet } from "../lib/snippets";
 
 export type PickerItem =
   | { kind: "snippet"; snippet: Snippet }
@@ -58,7 +58,9 @@ export function SnippetPickerContent({
                         onClick={() => onPick(it)}
                         className={cn(
                           "flex w-full items-center gap-2 px-2 py-1.5 text-left text-[12px]",
-                          i === activeIndex ? "bg-accent" : "hover:bg-accent/60",
+                          i === activeIndex
+                            ? "bg-accent"
+                            : "hover:bg-accent/60",
                         )}
                       >
                         <HugeiconsIcon
@@ -73,9 +75,6 @@ export function SnippetPickerContent({
                               #{c.name}
                             </span>
                             <span className="font-medium">{c.label}</span>
-                          </span>
-                          <span className="line-clamp-1 text-[10.5px] text-muted-foreground">
-                            {c.description}
                           </span>
                         </span>
                       </button>
@@ -102,7 +101,9 @@ export function SnippetPickerContent({
                         onClick={() => onPick(it)}
                         className={cn(
                           "flex w-full flex-col items-start gap-0.5 px-2 py-1.5 text-left text-[12px]",
-                          i === activeIndex ? "bg-accent" : "hover:bg-accent/60",
+                          i === activeIndex
+                            ? "bg-accent"
+                            : "hover:bg-accent/60",
                         )}
                       >
                         <span className="flex w-full items-center gap-1.5">
